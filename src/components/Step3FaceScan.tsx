@@ -11,6 +11,7 @@ interface Step3Props {
   onBack: () => void
   eidImage?: string // Emirates ID front image for face matching
   eidBackImage?: string // Emirates ID back image (optional)
+  service?: string | null
 }
 
 type LivenessAction = 'blink' | 'smile' | 'turn-left' | 'turn-right' | null
@@ -22,7 +23,11 @@ const livenessInstructions: Record<Exclude<LivenessAction, null>, string> = {
   'turn-right': 'Turn your head slightly to the right',
 }
 
-export default function Step3FaceScan({ onComplete, onBack, eidImage, eidBackImage }: Step3Props) {
+export default function Step3FaceScan({ onComplete, onBack, eidImage, eidBackImage, service }: Step3Props) {
+  // Determine route
+  const route = (service || 'uae-to-pinas').toLowerCase()
+  const isPhToUae = route === 'ph-to-uae'
+  const routeDisplay = isPhToUae ? 'PHILIPPINES TO UAE' : 'UAE TO PHILIPPINES'
   const webcamRef = useRef<Webcam>(null)
   const [isScanning, setIsScanning] = useState(false)
   const [isProcessing, setIsProcessing] = useState(false)
@@ -290,7 +295,35 @@ export default function Step3FaceScan({ onComplete, onBack, eidImage, eidBackIma
   }
 
   return (
-    <div className="p-8 space-y-6">
+    <div className="space-y-6">
+      {/* Sub-Header with Route Badge */}
+      <div className="bg-white border-b border-gray-200">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+          <div className="flex items-center justify-between">
+            <button
+              onClick={onBack}
+              className="flex items-center gap-2 text-gray-700 hover:text-gray-900 transition-colors"
+            >
+              <ArrowLeft className="w-5 h-5" />
+              <span>Back</span>
+            </button>
+            <div className="flex-1 flex justify-center">
+              <div className="flex items-center gap-2 bg-green-600 text-white px-4 py-2 rounded-full">
+                <span className="text-sm font-semibold">{routeDisplay}</span>
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+                </svg>
+              </div>
+            </div>
+            <div className="text-sm text-gray-600 font-medium">
+              Step 6 of 7: Face Scan
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 pb-8">
+        <div className="bg-white rounded-lg shadow-lg p-8 space-y-6">
       {/* Header */}
       <div className="text-center">
         <h2 className="text-3xl font-bold text-gray-800 mb-2">Verify Your Identity</h2>
@@ -501,9 +534,11 @@ export default function Step3FaceScan({ onComplete, onBack, eidImage, eidBackIma
             disabled={!faceImage || !success}
             className="btn-primary flex-1"
           >
-            Review Terms & Submit →
+            Proceed to Booking Confirmation →
           </button>
         )}
+          </div>
+        </div>
       </div>
     </div>
   )

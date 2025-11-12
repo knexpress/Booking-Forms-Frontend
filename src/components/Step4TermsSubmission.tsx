@@ -39,14 +39,14 @@ export default function Step4TermsSubmission({ onSubmit, onBack }: Step4Props) {
       <div className="bg-white border-2 border-gray-200 rounded-lg p-6">
         <div className="flex items-center gap-2 mb-4">
           <FileText className="w-6 h-6 text-primary-600" />
-          <h3 className="text-xl font-semibold text-gray-800">KNEXY Delivery Services Terms & Conditions</h3>
+          <h3 className="text-xl font-semibold text-gray-800">KNEX Delivery Services Terms & Conditions</h3>
         </div>
 
         <div className="h-96 overflow-y-auto bg-gray-50 p-6 rounded-lg border border-gray-300 space-y-4 text-sm text-gray-700">
           <section>
             <h4 className="font-bold text-gray-800 text-base mb-2">1. ACCEPTANCE OF TERMS</h4>
             <p>
-              By using KNEXY Delivery Services L.L.C cargo booking and delivery services, you agree to be bound by these 
+              By using KNEX Delivery Services L.L.C cargo booking and delivery services, you agree to be bound by these 
               Terms and Conditions. If you do not agree to these terms, please do not use our services.
             </p>
           </section>
@@ -54,7 +54,7 @@ export default function Step4TermsSubmission({ onSubmit, onBack }: Step4Props) {
           <section>
             <h4 className="font-bold text-gray-800 text-base mb-2">2. SERVICE DESCRIPTION</h4>
             <p>
-              KNEXY Delivery Services provides cargo delivery services from the United Arab Emirates to the Philippines. 
+              KNEX Delivery Services provides cargo delivery services from the United Arab Emirates to the Philippines. 
               We act solely as a carrier and logistics provider. Our services include pickup, packaging, international 
               shipping, customs clearance, and final delivery.
             </p>
@@ -122,14 +122,14 @@ export default function Step4TermsSubmission({ onSubmit, onBack }: Step4Props) {
             </ul>
             <p className="mt-2">
               Delivery times are estimates and may be affected by customs clearance, weather, or other factors beyond 
-              our control. KNEXY Delivery Services is not liable for delays caused by circumstances beyond our control.
+              our control. KNEX Delivery Services is not liable for delays caused by circumstances beyond our control.
             </p>
           </section>
 
           <section>
             <h4 className="font-bold text-gray-800 text-base mb-2">8. LIABILITY AND INSURANCE</h4>
             <p>
-              KNEXY Delivery Services acts solely as a carrier. We are not responsible for the nature, condition, quality, 
+              KNEX Delivery Services acts solely as a carrier. We are not responsible for the nature, condition, quality, 
               or value of the contents of any shipment. Our liability is limited to a maximum of AED 500 per shipment 
               unless additional insurance is purchased. We are not liable for:
             </p>
@@ -176,7 +176,7 @@ export default function Step4TermsSubmission({ onSubmit, onBack }: Step4Props) {
             <h4 className="font-bold text-gray-800 text-base mb-2">12. CUSTOMS AND DUTIES</h4>
             <p>
               Shipments are subject to customs inspection and duties in both UAE and Philippines. The receiver is 
-              responsible for all customs duties, taxes, and clearance fees. KNEXY Delivery Services is not responsible 
+              responsible for all customs duties, taxes, and clearance fees. KNEX Delivery Services is not responsible 
               for customs delays or additional charges imposed by authorities.
             </p>
           </section>
@@ -184,7 +184,7 @@ export default function Step4TermsSubmission({ onSubmit, onBack }: Step4Props) {
           <section>
             <h4 className="font-bold text-gray-800 text-base mb-2">13. AMENDMENTS</h4>
             <p>
-              KNEXY Delivery Services reserves the right to modify these Terms and Conditions at any time. Continued 
+              KNEX Delivery Services reserves the right to modify these Terms and Conditions at any time. Continued 
               use of our services constitutes acceptance of any changes.
             </p>
           </section>
@@ -192,7 +192,7 @@ export default function Step4TermsSubmission({ onSubmit, onBack }: Step4Props) {
           <section>
             <h4 className="font-bold text-gray-800 text-base mb-2">14. CONTACT INFORMATION</h4>
             <p>
-              <strong>KNEXY DELIVERY SERVICES L.L.C</strong><br />
+              <strong>KNEX DELIVERY SERVICES L.L.C</strong><br />
               Rocky Warehouse #19, 11th Street<br />
               Al Qusais Industrial Area 1<br />
               Dubai, United Arab Emirates<br />
@@ -222,7 +222,7 @@ export default function Step4TermsSubmission({ onSubmit, onBack }: Step4Props) {
             className="w-5 h-5 text-primary-600 mt-1 cursor-pointer"
           />
           <span className="text-sm text-gray-700 flex-1">
-            <strong className="text-gray-900">I have read and agree to the KNEXY Delivery Services Terms and Conditions, 
+            <strong className="text-gray-900">I have read and agree to the KNEX Delivery Services Terms and Conditions, 
             Privacy Policy, and all declarations.</strong> I confirm the accuracy of all submitted information and declare 
             that my shipment contains no prohibited or restricted items. I understand that shipping prohibited items is 
             a criminal offense and accept full responsibility for the contents of my shipment.

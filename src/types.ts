@@ -1,17 +1,46 @@
 export interface SenderDetails {
   fullName: string;
+  firstName?: string;
+  lastName?: string;
   completeAddress: string;
+  country?: string;
+  emirates?: string;
+  city?: string;
+  district?: string;
+  zone?: string;
+  addressLine1?: string;
+  landmark?: string;
+  dialCode?: string;
+  phoneNumber?: string;
   contactNo: string;
   emailAddress: string;
   agentName?: string;
+  deliveryOption?: 'warehouse' | 'pickup';
 }
 
 export interface ReceiverDetails {
   fullName: string;
+  firstName?: string;
+  lastName?: string;
   completeAddress: string;
+  country?: string;
+  region?: string;
+  province?: string;
+  city?: string;
+  barangay?: string;
+  addressLine1?: string;
+  landmark?: string;
+  dialCode?: string;
+  phoneNumber?: string;
   contactNo: string;
   emailAddress: string;
-  deliveryOption: 'warehouse' | 'address';
+  deliveryOption: 'pickup' | 'delivery';
+}
+
+export interface AdditionalDetails {
+  paymentMethod: 'cash' | 'bank';
+  email?: string;
+  additionalInstructions?: string;
 }
 
 export interface ItemDeclaration {
@@ -25,6 +54,7 @@ export interface BookingFormData {
   sender: SenderDetails;
   receiver: ReceiverDetails;
   items: ItemDeclaration[];
+  additionalDetails?: AdditionalDetails;
 }
 
 export interface VerificationData {
@@ -42,5 +72,5 @@ export interface BookingData extends BookingFormData {
   submissionTimestamp?: string;
 }
 
-export type Step = 0 | 1 | 2 | 3 | 4;
+export type Step = -1 | 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7;
 

@@ -1,16 +1,22 @@
 import { useState } from 'react'
-import { BookingFormData, VerificationData, Step } from './types'
+import { BookingFormData, VerificationData, Step, ItemDeclaration } from './types'
+import Header from './components/Header'
+import Footer from './components/Footer'
+import LandingPage from './components/LandingPage'
 import ServiceSelection from './components/ServiceSelection'
 import Step1BookingForm from './components/Step1BookingForm'
+import ReceiverDetailsForm from './components/ReceiverDetailsForm'
+import CommoditiesDeclaration from './components/CommoditiesDeclaration'
+import AdditionalDetails from './components/AdditionalDetails'
 import Step2EmiratesIDScan from './components/Step2EmiratesIDScan'
 import Step3FaceScan from './components/Step3FaceScan'
-import Step4TermsSubmission from './components/Step4TermsSubmission'
+import BookingConfirmation from './components/BookingConfirmation'
 import ToastContainer, { showToast } from './components/ToastContainer'
 import { generateBookingPDF } from './utils/pdfGenerator'
 import ErrorBoundary from './components/ErrorBoundary'
 
 function App() {
-  const [currentStep, setCurrentStep] = useState<Step>(0 as Step) // Start at 0 for service selection
+  const [currentStep, setCurrentStep] = useState<Step>(-1 as Step) // Start at -1 for landing page
   const [selectedService, setSelectedService] = useState<string | null>(null)
   const [bookingData, setBookingData] = useState<BookingFormData | null>(null)
   const [verificationData, setVerificationData] = useState<VerificationData>({
@@ -18,27 +24,66 @@ function App() {
     faceVerified: false,
   })
 
-  const handleServiceSelection = (service: string) => {
-    setSelectedService(service)
-    setCurrentStep(1) // Go to booking form
+  const handleBookShipment = () => {
+    setCurrentStep(0) // Go to route selection
   }
 
-  const handleStep1Complete = (data: BookingFormData) => {
-    setBookingData({
-      ...data,
-      service: selectedService || 'uae-to-pinas' // Add selected service to booking data (default to uae-to-pinas)
-    })
-    setCurrentStep(2) // Go to Emirates ID Scan
+  const handleServiceSelection = (service: string) => {
+    setSelectedService(service)
+    setCurrentStep(1) // Go to sender details form
+  }
+
+  const handleSenderDetailsNext = (senderData: Partial<BookingFormData>) => {
+    setBookingData(prev => ({
+      ...prev,
+      ...senderData,
+      service: selectedService || senderData.service || 'uae-to-pinas'
+    } as BookingFormData))
+    setCurrentStep(2) // Go to receiver details form
+  }
+
+  const handleReceiverDetailsNext = (receiverData: Partial<BookingFormData>) => {
+    setBookingData(prev => ({
+      ...prev,
+      ...receiverData,
+      service: selectedService || prev?.service || 'uae-to-pinas',
+      items: prev?.items || []
+    } as BookingFormData))
+    setCurrentStep(3) // Go to Commodities Declaration
+  }
+
+  const handleCommoditiesNext = (items: ItemDeclaration[]) => {
+    setBookingData(prev => ({
+      ...prev,
+      items
+    } as BookingFormData))
+    setCurrentStep(4) // Go to Additional Details
+  }
+
+  const handleAdditionalDetailsNext = (additionalData: {
+    paymentMethod: 'cash' | 'bank'
+    email?: string
+    additionalInstructions?: string
+  }) => {
+    setBookingData(prev => ({
+      ...prev,
+      receiver: prev?.receiver ? {
+        ...prev.receiver,
+        emailAddress: additionalData.email || prev.receiver.emailAddress
+      } : prev?.receiver,
+      additionalDetails: additionalData
+    } as BookingFormData))
+    setCurrentStep(5) // Go to Emirates ID Scan
   }
 
   const handleStep2Complete = (eidData: Partial<VerificationData>) => {
     setVerificationData(prev => ({ ...prev, ...eidData, eidVerified: true }))
-    setCurrentStep(3) // Go to Face Scan
+    setCurrentStep(6) // Go to Face Scan
   }
 
   const handleStep3Complete = (faceData: Partial<VerificationData>) => {
     setVerificationData(prev => ({ ...prev, ...faceData, faceVerified: true }))
-    setCurrentStep(4) // Go to Terms & Submission
+    setCurrentStep(7) // Go to Terms & Submission
   }
 
   const handleFinalSubmit = async () => {
@@ -102,12 +147,12 @@ function App() {
           duration: 8000, // Show for 8 seconds to give user time to click print
         })
 
-        // After toast duration, reset flow back to first window (service selection)
+        // After toast duration, reset flow back to landing page
         setTimeout(() => {
           setSelectedService(null)
           setBookingData(null)
           setVerificationData({ eidVerified: false, faceVerified: false })
-          setCurrentStep(0 as Step)
+          setCurrentStep(-1 as Step)
         }, 8200)
       } else {
         console.error('❌ Booking failed:', result.error)
@@ -129,144 +174,201 @@ function App() {
 
   const handleBack = () => {
     // Going back logic
-    if (currentStep === 4) {
-      setCurrentStep(3) // From terms back to face scan
+    if (currentStep === 7) {
+      setCurrentStep(6) // From terms back to face scan
+    } else if (currentStep === 6) {
+      setCurrentStep(5) // From face scan back to EID scan
+    } else if (currentStep === 5) {
+      setCurrentStep(4) // From EID scan back to additional details
+    } else if (currentStep === 4) {
+      setCurrentStep(3) // From additional details back to commodities declaration
     } else if (currentStep === 3) {
-      setCurrentStep(2) // From face scan back to EID scan
+      setCurrentStep(2) // From commodities declaration back to receiver details
     } else if (currentStep === 2) {
-      setCurrentStep(1) // From EID scan back to form
+      setCurrentStep(1) // From receiver details back to sender details
     } else if (currentStep === 1) {
-      setCurrentStep(0 as Step) // From form back to service selection
+      setCurrentStep(0 as Step) // From sender details back to service selection
+    } else if (currentStep === 0) {
+      setCurrentStep(-1 as Step) // From service selection back to landing page
     }
   }
 
   return (
-    <div className="min-h-screen py-8 px-4">
+    <div className="min-h-screen flex flex-col bg-gray-100">
       <ToastContainer />
-      <div className="max-w-5xl mx-auto">
-        
-        {/* Progress Indicator - Only show after service selection */}
-        {currentStep > 0 && (
-          <div className="mb-6">
-            <div className="flex items-center justify-center">
-              <div className="flex items-center space-x-3">
-                {/* Step 1: Booking Form */}
-                <div className="flex items-center">
-                  <div className={`flex items-center justify-center w-8 h-8 rounded-full border-2 text-xs ${
-                    currentStep === 1 ? 'border-primary-600 bg-primary-600 text-white' : 
-                    currentStep > 1 ? 'border-green-500 bg-green-500 text-white' : 
-                    'border-gray-300 bg-white text-gray-400'
-                  }`}>
-                    {currentStep > 1 ? '✓' : '1'}
-                  </div>
-                  <span className={`ml-1 text-xs font-medium hidden sm:inline ${
-                    currentStep === 1 ? 'text-primary-600' : 
-                    currentStep > 1 ? 'text-green-600' : 
-                    'text-gray-400'
-                  }`}>
-                    Form
-                  </span>
-                </div>
-                
-                {/* Connector */}
-                <div className={`h-0.5 w-8 ${currentStep > 1 ? 'bg-green-500' : 'bg-gray-300'}`}></div>
-                
-                {/* Step 2: Emirates ID */}
-                <div className="flex items-center">
-                  <div className={`flex items-center justify-center w-8 h-8 rounded-full border-2 text-xs ${
-                    currentStep === 2 ? 'border-primary-600 bg-primary-600 text-white' : 
-                    currentStep > 2 ? 'border-green-500 bg-green-500 text-white' : 
-                    'border-gray-300 bg-white text-gray-400'
-                  }`}>
-                    {currentStep > 2 ? '✓' : '2'}
-                  </div>
-                  <span className={`ml-1 text-xs font-medium hidden sm:inline ${
-                    currentStep === 2 ? 'text-primary-600' : 
-                    currentStep > 2 ? 'text-green-600' : 
-                    'text-gray-400'
-                  }`}>
-                    ID Scan
-                  </span>
-                </div>
+      <Header onBookNow={currentStep === -1 ? undefined : handleBookShipment} />
+      {currentStep === -1 ? (
+        <ErrorBoundary>
+          <LandingPage onBookShipment={handleBookShipment} />
+        </ErrorBoundary>
+      ) : (
+        <div className="flex-1 py-8 px-4">
+          <div className="max-w-7xl mx-auto">
+            
+            {/* Progress Indicator - Only show after route selection */}
+            {currentStep > 0 && (
+              <div className="mb-6">
+                <div className="flex items-center justify-center">
+                  <div className="flex items-center space-x-3">
+                    {/* Step 1: Booking Form */}
+                    <div className="flex items-center">
+                      <div className={`flex items-center justify-center w-8 h-8 rounded-full border-2 text-xs ${
+                        currentStep === 1 ? 'border-primary-600 bg-primary-600 text-white' : 
+                        currentStep > 1 ? 'border-green-500 bg-green-500 text-white' : 
+                        'border-gray-300 bg-white text-gray-400'
+                      }`}>
+                        {currentStep > 1 ? '✓' : '1'}
+                      </div>
+                      <span className={`ml-1 text-xs font-medium hidden sm:inline ${
+                        currentStep === 1 ? 'text-primary-600' : 
+                        currentStep > 1 ? 'text-green-600' : 
+                        'text-gray-400'
+                      }`}>
+                        Form
+                      </span>
+                    </div>
+                    
+                    {/* Connector */}
+                    <div className={`h-0.5 w-8 ${currentStep > 1 ? 'bg-green-500' : 'bg-gray-300'}`}></div>
+                    
+                    {/* Step 2: Emirates ID */}
+                    <div className="flex items-center">
+                      <div className={`flex items-center justify-center w-8 h-8 rounded-full border-2 text-xs ${
+                        currentStep === 2 ? 'border-primary-600 bg-primary-600 text-white' : 
+                        currentStep > 2 ? 'border-green-500 bg-green-500 text-white' : 
+                        'border-gray-300 bg-white text-gray-400'
+                      }`}>
+                        {currentStep > 2 ? '✓' : '2'}
+                      </div>
+                      <span className={`ml-1 text-xs font-medium hidden sm:inline ${
+                        currentStep === 2 ? 'text-primary-600' : 
+                        currentStep > 2 ? 'text-green-600' : 
+                        'text-gray-400'
+                      }`}>
+                        ID Scan
+                      </span>
+                    </div>
 
-                {/* Connector */}
-                <div className={`h-0.5 w-8 ${currentStep > 2 ? 'bg-green-500' : 'bg-gray-300'}`}></div>
-                
-                {/* Step 3: Face Scan */}
-                <div className="flex items-center">
-                  <div className={`flex items-center justify-center w-8 h-8 rounded-full border-2 text-xs ${
-                    currentStep === 3 ? 'border-primary-600 bg-primary-600 text-white' : 
-                    currentStep > 3 ? 'border-green-500 bg-green-500 text-white' : 
-                    'border-gray-300 bg-white text-gray-400'
-                  }`}>
-                    {currentStep > 3 ? '✓' : '3'}
-                  </div>
-                  <span className={`ml-1 text-xs font-medium hidden sm:inline ${
-                    currentStep === 3 ? 'text-primary-600' : 
-                    currentStep > 3 ? 'text-green-600' : 
-                    'text-gray-400'
-                  }`}>
-                    Face Scan
-                  </span>
-                </div>
+                    {/* Connector */}
+                    <div className={`h-0.5 w-8 ${currentStep > 2 ? 'bg-green-500' : 'bg-gray-300'}`}></div>
+                    
+                    {/* Step 3: Face Scan */}
+                    <div className="flex items-center">
+                      <div className={`flex items-center justify-center w-8 h-8 rounded-full border-2 text-xs ${
+                        currentStep === 3 ? 'border-primary-600 bg-primary-600 text-white' : 
+                        currentStep > 3 ? 'border-green-500 bg-green-500 text-white' : 
+                        'border-gray-300 bg-white text-gray-400'
+                      }`}>
+                        {currentStep > 3 ? '✓' : '3'}
+                      </div>
+                      <span className={`ml-1 text-xs font-medium hidden sm:inline ${
+                        currentStep === 3 ? 'text-primary-600' : 
+                        currentStep > 3 ? 'text-green-600' : 
+                        'text-gray-400'
+                      }`}>
+                        Face Scan
+                      </span>
+                    </div>
 
-                {/* Connector */}
-                <div className={`h-0.5 w-8 ${currentStep > 3 ? 'bg-green-500' : 'bg-gray-300'}`}></div>
-                
-                {/* Step 4: Submit */}
-                <div className="flex items-center">
-                  <div className={`flex items-center justify-center w-8 h-8 rounded-full border-2 text-xs ${
-                    currentStep === 4 ? 'border-primary-600 bg-primary-600 text-white' : 
-                    'border-gray-300 bg-white text-gray-400'
-                  }`}>
-                    4
+                    {/* Connector */}
+                    <div className={`h-0.5 w-8 ${currentStep > 3 ? 'bg-green-500' : 'bg-gray-300'}`}></div>
+                    
+                    {/* Step 4: Submit */}
+                    <div className="flex items-center">
+                      <div className={`flex items-center justify-center w-8 h-8 rounded-full border-2 text-xs ${
+                        currentStep === 4 ? 'border-primary-600 bg-primary-600 text-white' : 
+                        'border-gray-300 bg-white text-gray-400'
+                      }`}>
+                        4
+                      </div>
+                      <span className={`ml-1 text-xs font-medium hidden sm:inline ${
+                        currentStep === 4 ? 'text-primary-600' : 'text-gray-400'
+                      }`}>
+                        Submit
+                      </span>
+                    </div>
                   </div>
-                  <span className={`ml-1 text-xs font-medium hidden sm:inline ${
-                    currentStep === 4 ? 'text-primary-600' : 'text-gray-400'
-                  }`}>
-                    Submit
-                  </span>
                 </div>
               </div>
+            )}
+            
+            <div className="bg-white rounded-2xl shadow-2xl overflow-hidden">
+              <ErrorBoundary>
+                {currentStep === 0 && (
+                  <ServiceSelection 
+                    onSelectService={handleServiceSelection} 
+                    onBack={handleBack}
+                  />
+                )}
+                
+              {currentStep === 1 && (
+                <Step1BookingForm 
+                  onNext={handleSenderDetailsNext} 
+                  onBack={handleBack}
+                  initialData={bookingData} 
+                  service={selectedService} 
+                />
+              )}
+                
+              {currentStep === 2 && (
+                <ReceiverDetailsForm 
+                  onNext={handleReceiverDetailsNext} 
+                  onBack={handleBack}
+                  initialData={bookingData} 
+                  service={selectedService} 
+                />
+              )}
+                
+              {currentStep === 3 && (
+                <CommoditiesDeclaration 
+                  onNext={handleCommoditiesNext} 
+                  onBack={handleBack}
+                  initialData={bookingData} 
+                  service={selectedService} 
+                />
+              )}
+                
+              {currentStep === 4 && (
+                <AdditionalDetails 
+                  onNext={handleAdditionalDetailsNext} 
+                  onBack={handleBack}
+                  initialData={bookingData} 
+                  service={selectedService} 
+                />
+              )}
+                
+              {currentStep === 5 && (
+                <Step2EmiratesIDScan 
+                  onComplete={handleStep2Complete}
+                  onBack={handleBack}
+                  service={selectedService}
+                />
+              )}
+                
+              {currentStep === 6 && (
+                <Step3FaceScan 
+                  onComplete={handleStep3Complete}
+                  onBack={handleBack}
+                  eidImage={verificationData.eidFrontImage}
+                  eidBackImage={verificationData.eidBackImage}
+                  service={selectedService}
+                />
+              )}
+                
+              {currentStep === 7 && (
+                <BookingConfirmation 
+                  onSubmit={handleFinalSubmit}
+                  onBack={handleBack}
+                  initialData={bookingData}
+                  service={selectedService}
+                />
+              )}
+              </ErrorBoundary>
             </div>
           </div>
-        )}
-        
-        <div className="bg-white rounded-2xl shadow-2xl overflow-hidden">
-          <ErrorBoundary>
-            {currentStep === 0 && (
-              <ServiceSelection onSelectService={handleServiceSelection} />
-            )}
-            
-          {currentStep === 1 && (
-            <Step1BookingForm onComplete={handleStep1Complete} initialData={bookingData} service={selectedService} />
-          )}
-            
-            {currentStep === 2 && (
-              <Step2EmiratesIDScan 
-                onComplete={handleStep2Complete}
-                onBack={handleBack}
-              />
-            )}
-            
-            {currentStep === 3 && (
-              <Step3FaceScan 
-                onComplete={handleStep3Complete}
-                onBack={handleBack}
-                eidImage={verificationData.eidFrontImage}
-                eidBackImage={verificationData.eidBackImage}
-              />
-            )}
-            
-            {currentStep === 4 && (
-              <Step4TermsSubmission 
-                onSubmit={handleFinalSubmit}
-                onBack={handleBack}
-              />
-            )}
-          </ErrorBoundary>
         </div>
-      </div>
+      )}
+      <Footer />
     </div>
   )
 }

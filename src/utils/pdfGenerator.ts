@@ -48,7 +48,7 @@ export async function generateBookingPDF(data: BookingPDFData, options?: { openI
   // Header
   doc.setFontSize(20)
   doc.setFont('helvetica', 'bold')
-  doc.text('KNEXY DELIVERY SERVICES', pageWidth / 2, yPos, { align: 'center' })
+  doc.text('KNEX DELIVERY SERVICES', pageWidth / 2, yPos, { align: 'center' })
   yPos += 10
 
   doc.setFontSize(14)
