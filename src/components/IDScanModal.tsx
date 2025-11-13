@@ -48,14 +48,14 @@ export default function IDScanModal({ isOpen, onClose, children, title }: IDScan
     >
       <div 
         ref={modalRef}
-        className="relative bg-white rounded-lg shadow-2xl w-full h-full max-w-7xl max-h-[98vh] sm:max-h-[95vh] flex flex-col overflow-hidden animate-fade-in"
+        className="relative bg-white rounded-lg shadow-2xl w-full h-full max-w-7xl max-h-[100vh] sm:max-h-[98vh] md:max-h-[95vh] flex flex-col overflow-hidden animate-fade-in"
       >
         {/* Header */}
-        <div className="flex items-center justify-between p-3 sm:p-4 lg:p-6 border-b border-gray-200 bg-green-600 text-white flex-shrink-0">
-          <h2 className="text-lg sm:text-xl lg:text-2xl font-bold pr-2">{title}</h2>
+        <div className="flex items-center justify-between p-2 sm:p-3 md:p-4 lg:p-6 border-b border-gray-200 bg-green-600 text-white flex-shrink-0">
+          <h2 className="text-base sm:text-lg md:text-xl lg:text-2xl font-bold pr-2 truncate">{title}</h2>
           <button
             onClick={onClose}
-            className="p-2 hover:bg-green-700 rounded-lg transition-colors flex-shrink-0"
+            className="p-1.5 sm:p-2 hover:bg-green-700 rounded-lg transition-colors flex-shrink-0"
             aria-label="Close"
           >
             <X className="w-5 h-5 sm:w-6 sm:h-6" />
@@ -63,7 +63,7 @@ export default function IDScanModal({ isOpen, onClose, children, title }: IDScan
         </div>
 
         {/* Content */}
-        <div className="flex-1 overflow-y-auto p-3 sm:p-4 lg:p-6">
+        <div className="flex-1 overflow-y-auto p-2 sm:p-3 md:p-4 lg:p-6">
           {children}
         </div>
       </div>

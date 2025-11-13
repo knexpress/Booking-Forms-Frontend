@@ -208,11 +208,17 @@ export function findDocumentContour(src: any): any[] | null {
       gray = src.clone();
     }
 
-    // Apply Gaussian blur to reduce noise
-    window.cv.GaussianBlur(gray, blur, new window.cv.Size(5, 5), 0);
+    // Detect if device is mobile for adaptive parameters
+    const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent) || window.innerWidth < 768;
+    
+    // Apply Gaussian blur to reduce noise - slightly more blur for mobile
+    const blurSize = isMobile ? 7 : 5;
+    window.cv.GaussianBlur(gray, blur, new window.cv.Size(blurSize, blurSize), 0);
 
-    // Apply Canny edge detection for better document detection
-    window.cv.Canny(blur, edges, 50, 150);
+    // Apply Canny edge detection - lower thresholds for mobile (better detection in lower light)
+    const cannyLow = isMobile ? 30 : 50;
+    const cannyHigh = isMobile ? 100 : 150;
+    window.cv.Canny(blur, edges, cannyLow, cannyHigh);
 
     // Find contours
     window.cv.findContours(
@@ -231,15 +237,19 @@ export function findDocumentContour(src: any): any[] | null {
       const contour = contours.get(i);
       const area = window.cv.contourArea(contour);
 
-      if (area > maxArea && area > 10000) {
-        // Minimum area threshold
-        // Approximate contour to polygon
-        const epsilon = 0.02 * window.cv.arcLength(contour, true);
+      // Adaptive minimum area threshold - lower for mobile devices
+      const minArea = isMobile ? 5000 : 10000;
+      if (area > maxArea && area > minArea) {
+        // Approximate contour to polygon - more lenient epsilon for mobile
+        const epsilonFactor = isMobile ? 0.03 : 0.02;
+        const epsilon = epsilonFactor * window.cv.arcLength(contour, true);
         const approx = new window.cv.Mat();
         window.cv.approxPolyDP(contour, approx, epsilon, true);
 
-        // Check if it's roughly rectangular (4 corners)
-        if (approx.rows >= 4 && approx.rows <= 6) {
+        // Check if it's roughly rectangular (4-6 corners, more lenient for mobile)
+        const minCorners = isMobile ? 4 : 4;
+        const maxCorners = isMobile ? 8 : 6;
+        if (approx.rows >= minCorners && approx.rows <= maxCorners) {
           maxArea = area;
           largestContour = approx;
         } else {

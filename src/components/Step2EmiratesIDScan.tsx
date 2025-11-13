@@ -55,10 +55,13 @@ export default function Step2EmiratesIDScan({ onComplete, onBack, service }: Ste
   const [modalOpen, setModalOpen] = useState(false)
   const [modalSide, setModalSide] = useState<ScanSide>(null)
   
-  // Minimum blur score threshold (adjust based on testing)
-  const MIN_BLUR_SCORE = 100
-  // Stability duration in milliseconds (1 second) - document must be stable for this duration
-  const STABILITY_DURATION = 1000
+  // Detect if device is mobile
+  const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent) || window.innerWidth < 768
+  
+  // Minimum blur score threshold - lower for mobile devices
+  const MIN_BLUR_SCORE = isMobile ? 50 : 100
+  // Stability duration in milliseconds - shorter for mobile (0.8s) vs desktop (1s)
+  const STABILITY_DURATION = isMobile ? 800 : 1000
   
   // Ref to track if capture has been triggered (persists across renders)
   const captureTriggeredRef = useRef(false)
@@ -443,12 +446,14 @@ export default function Step2EmiratesIDScan({ onComplete, onBack, service }: Ste
         // Check if document is detected and not blurry
         if (detected && points && points.length >= 4 && blurScore >= MIN_BLUR_SCORE) {
           // Check if points are similar to last stable points (within threshold)
+          // More lenient threshold for mobile devices
+          const stabilityThreshold = isMobile ? 30 : 20
           const pointsSimilar = lastStablePoints && points.length === lastStablePoints.length &&
             points.every((p, i) => {
               const lastP = lastStablePoints![i]
               const dx = Math.abs(p.x - lastP.x)
               const dy = Math.abs(p.y - lastP.y)
-              return dx < 20 && dy < 20 // 20 pixel threshold
+              return dx < stabilityThreshold && dy < stabilityThreshold
             })
 
           if (pointsSimilar && stableStart !== null) {
@@ -993,25 +998,26 @@ export default function Step2EmiratesIDScan({ onComplete, onBack, service }: Ste
               {currentSide === 'front' && !frontImage ? (
                 <div className="flex-1 flex flex-col space-y-4">
                   {/* Instructions */}
-                  <div className="bg-blue-50 border-l-4 border-blue-500 p-3 rounded">
-                    <p className="text-sm text-blue-800">
-                      <strong>Instructions:</strong> Position your Emirates ID card within the frame. The system will automatically detect and capture when the card is clear and stable.
+                  <div className="bg-blue-50 border-l-4 border-blue-500 p-2 sm:p-3 rounded">
+                    <p className="text-xs sm:text-sm text-blue-800">
+                      <strong>Instructions:</strong> Position your Emirates ID card within the frame. {isMobile ? 'Hold steady for a moment.' : 'The system will automatically detect and capture when the card is clear and stable.'}
                     </p>
                   </div>
 
                   {/* Camera View - Full Screen */}
                   {!cameraError ? (
-                    <div className="relative bg-black rounded-lg overflow-hidden flex-1 min-h-[50vh] flex items-center justify-center">
+                    <div className="relative bg-black rounded-lg overflow-hidden flex-1 min-h-[40vh] sm:min-h-[50vh] flex items-center justify-center">
                       <Webcam
                         ref={webcamRef}
                         audio={false}
                         screenshotFormat="image/jpeg"
-                        screenshotQuality={0.95}
+                        screenshotQuality={isMobile ? 0.85 : 0.95}
                         className="w-full h-full object-contain"
                         videoConstraints={{
-                          width: 1920,
-                          height: 1080,
-                          facingMode: 'environment'
+                          width: isMobile ? { ideal: 1280, max: 1920 } : { ideal: 1920 },
+                          height: isMobile ? { ideal: 720, max: 1080 } : { ideal: 1080 },
+                          facingMode: 'environment',
+                          aspectRatio: { ideal: 16/9 }
                         }}
                         onUserMedia={(stream) => {
                           console.log('✅ Front camera loaded in modal')
@@ -1042,8 +1048,8 @@ export default function Step2EmiratesIDScan({ onComplete, onBack, service }: Ste
                         style={{ zIndex: 10 }}
                       />
                       
-                      {/* Guide frame - larger in modal */}
-                      <div className={`absolute inset-4 sm:inset-8 border-4 border-dashed rounded-lg pointer-events-none transition-all duration-300 ${
+                      {/* Guide frame - adaptive sizing for mobile */}
+                      <div className={`absolute inset-2 sm:inset-4 md:inset-8 border-2 sm:border-4 border-dashed rounded-lg pointer-events-none transition-all duration-300 ${
                         detectionReady 
                           ? 'border-green-500 bg-green-500 bg-opacity-20 shadow-lg shadow-green-500/50' 
                           : detectedPoints 
@@ -1051,10 +1057,10 @@ export default function Step2EmiratesIDScan({ onComplete, onBack, service }: Ste
                             : 'border-gray-400'
                       }`} />
                       
-                      {/* Detection status - larger in modal */}
+                      {/* Detection status - adaptive for mobile */}
                       {isDetecting && (
-                        <div className="absolute top-4 sm:top-6 left-4 sm:left-6 right-4 sm:right-6 z-20">
-                          <div className={`px-4 sm:px-6 py-3 sm:py-4 rounded-lg text-white text-base sm:text-lg font-bold shadow-lg ${
+                        <div className="absolute top-2 sm:top-4 md:top-6 left-2 sm:left-4 md:left-6 right-2 sm:right-4 md:right-6 z-20">
+                          <div className={`px-3 sm:px-4 md:px-6 py-2 sm:py-3 md:py-4 rounded-lg text-white text-sm sm:text-base md:text-lg font-bold shadow-lg ${
                             detectionReady 
                               ? 'bg-green-600 animate-pulse' 
                               : detectedPoints 
@@ -1062,10 +1068,10 @@ export default function Step2EmiratesIDScan({ onComplete, onBack, service }: Ste
                                 : 'bg-blue-600'
                           }`}>
                             {detectionReady 
-                              ? '✓ Ready to capture! Capturing automatically...' 
+                              ? '✓ Ready! Capturing...' 
                               : detectedPoints 
-                                ? `Hold steady... (Blur: ${lastBlurScore.toFixed(0)})` 
-                                : 'Position your ID card in the frame'}
+                                ? `Hold steady... ${!isMobile ? `(Blur: ${lastBlurScore.toFixed(0)})` : ''}` 
+                                : 'Position ID card in frame'}
                           </div>
                         </div>
                       )}
@@ -1222,17 +1228,18 @@ export default function Step2EmiratesIDScan({ onComplete, onBack, service }: Ste
 
                   {/* Camera View - Full Screen */}
                   {!cameraError ? (
-                    <div className="relative bg-black rounded-lg overflow-hidden flex-1 min-h-[50vh] flex items-center justify-center">
+                    <div className="relative bg-black rounded-lg overflow-hidden flex-1 min-h-[40vh] sm:min-h-[50vh] flex items-center justify-center">
                       <Webcam
                         ref={webcamRef}
                         audio={false}
                         screenshotFormat="image/jpeg"
-                        screenshotQuality={0.95}
+                        screenshotQuality={isMobile ? 0.85 : 0.95}
                         className="w-full h-full object-contain"
                         videoConstraints={{
-                          width: 1920,
-                          height: 1080,
-                          facingMode: 'environment'
+                          width: isMobile ? { ideal: 1280, max: 1920 } : { ideal: 1920 },
+                          height: isMobile ? { ideal: 720, max: 1080 } : { ideal: 1080 },
+                          facingMode: 'environment',
+                          aspectRatio: { ideal: 16/9 }
                         }}
                         onUserMedia={(stream) => {
                           console.log('✅ Back camera loaded in modal')
@@ -1263,8 +1270,8 @@ export default function Step2EmiratesIDScan({ onComplete, onBack, service }: Ste
                         style={{ zIndex: 10 }}
                       />
                       
-                      {/* Guide frame - larger in modal */}
-                      <div className={`absolute inset-4 sm:inset-8 border-4 border-dashed rounded-lg pointer-events-none transition-all duration-300 ${
+                      {/* Guide frame - adaptive sizing for mobile */}
+                      <div className={`absolute inset-2 sm:inset-4 md:inset-8 border-2 sm:border-4 border-dashed rounded-lg pointer-events-none transition-all duration-300 ${
                         detectionReady 
                           ? 'border-green-500 bg-green-500 bg-opacity-20 shadow-lg shadow-green-500/50' 
                           : detectedPoints 
@@ -1272,10 +1279,10 @@ export default function Step2EmiratesIDScan({ onComplete, onBack, service }: Ste
                             : 'border-gray-400'
                       }`} />
                       
-                      {/* Detection status - larger in modal */}
+                      {/* Detection status - adaptive for mobile */}
                       {isDetecting && (
-                        <div className="absolute top-4 sm:top-6 left-4 sm:left-6 right-4 sm:right-6 z-20">
-                          <div className={`px-4 sm:px-6 py-3 sm:py-4 rounded-lg text-white text-base sm:text-lg font-bold shadow-lg ${
+                        <div className="absolute top-2 sm:top-4 md:top-6 left-2 sm:left-4 md:left-6 right-2 sm:right-4 md:right-6 z-20">
+                          <div className={`px-3 sm:px-4 md:px-6 py-2 sm:py-3 md:py-4 rounded-lg text-white text-sm sm:text-base md:text-lg font-bold shadow-lg ${
                             detectionReady 
                               ? 'bg-green-600 animate-pulse' 
                               : detectedPoints 
@@ -1283,10 +1290,10 @@ export default function Step2EmiratesIDScan({ onComplete, onBack, service }: Ste
                                 : 'bg-blue-600'
                           }`}>
                             {detectionReady 
-                              ? '✓ Ready to capture! Capturing automatically...' 
+                              ? '✓ Ready! Capturing...' 
                               : detectedPoints 
-                                ? `Hold steady... (Blur: ${lastBlurScore.toFixed(0)})` 
-                                : 'Position your ID card in the frame'}
+                                ? `Hold steady... ${!isMobile ? `(Blur: ${lastBlurScore.toFixed(0)})` : ''}` 
+                                : 'Position ID card in frame'}
                           </div>
                         </div>
                       )}
