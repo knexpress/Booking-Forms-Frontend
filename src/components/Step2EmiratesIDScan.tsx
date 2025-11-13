@@ -3,6 +3,7 @@ import Webcam from 'react-webcam'
 import { Camera, CheckCircle, XCircle, RotateCcw, ArrowLeft, Maximize2 } from 'lucide-react'
 import { VerificationData } from '../types'
 import { processEmiratesID, validateEmiratesIDFormat, isEmiratesIDExpired } from '../services/ocrService'
+import { validateIsEmiratesID } from '../services/idValidationService'
 import { API_CONFIG } from '../config/api.config'
 import {
   loadOpenCV,
@@ -58,10 +59,10 @@ export default function Step2EmiratesIDScan({ onComplete, onBack, service }: Ste
   // Detect if device is mobile
   const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent) || window.innerWidth < 768
   
-  // Minimum blur score threshold - lower for mobile devices
-  const MIN_BLUR_SCORE = isMobile ? 50 : 100
-  // Stability duration in milliseconds - shorter for mobile (0.8s) vs desktop (1s)
-  const STABILITY_DURATION = isMobile ? 800 : 1000
+  // Minimum blur score threshold - much lower for easier capture
+  const MIN_BLUR_SCORE = isMobile ? 30 : 50
+  // Stability duration in milliseconds - much shorter for easier capture
+  const STABILITY_DURATION = isMobile ? 500 : 700
   
   // Ref to track if capture has been triggered (persists across renders)
   const captureTriggeredRef = useRef(false)
@@ -290,30 +291,47 @@ export default function Step2EmiratesIDScan({ onComplete, onBack, service }: Ste
         console.log('✅ Back cropped image stored in state')
       }
 
-      // Process the original screenshot (for OCR if needed)
-      // Use cropped image if original screenshot is not available
-      const imageToProcess = originalScreenshot || croppedBase64
+      // IMPORTANT: Always use cropped image for storage and processing
+      // The cropped image contains only the ID card frame, not the whole camera view
       const useTrueID = !API_CONFIG.features.simulationMode
 
-      console.log('📸 Step 6: Processing and storing final image...', { mode: useTrueID ? 'TRUE-ID' : 'OCR', side: captureSide })
+      console.log('📸 Step 6: Validating Emirates ID...', { side: captureSide })
+      setProcessingMessage('Validating Emirates ID card...')
+      
+      // Validate that the captured image is actually an Emirates ID
+      // Use cropped image for validation
+      const validationResult = await validateIsEmiratesID(croppedBase64, captureSide)
+      
+      if (!validationResult.isValid || !validationResult.isEmiratesID) {
+        throw new Error(
+          validationResult.error || 
+          `This does not appear to be an Emirates ID card. Please ensure you are scanning the ${captureSide} of a valid Emirates ID.`
+        )
+      }
+      
+      console.log('✅ Emirates ID validation passed', { 
+        confidence: validationResult.confidence,
+        side: captureSide 
+      })
+      
+      console.log('📸 Step 7: Processing and storing CROPPED image only...', { mode: useTrueID ? 'TRUE-ID' : 'OCR', side: captureSide })
       
       if (useTrueID) {
-        // TRUE-ID mode: Just capture and store the image
-        // Use cropped image as it's better quality (already cropped and processed)
+        // TRUE-ID mode: Store only the cropped image (ID card frame only)
         if (captureSide === 'front') {
-          console.log('💾 Storing front image (TRUE-ID mode)...')
-          setFrontImage(croppedBase64) // Use cropped image - it's the processed document
+          console.log('💾 Storing front CROPPED image (TRUE-ID mode)...')
+          setFrontImage(croppedBase64) // Cropped image contains only the ID card
           setEidData({ captured: true, mode: 'TRUE-ID' })
-          console.log('✅ Front image stored in state (TRUE-ID mode)')
+          console.log('✅ Front cropped image stored in state (TRUE-ID mode)')
         } else if (captureSide === 'back') {
-          console.log('💾 Storing back image (TRUE-ID mode)...')
-          setBackImage(croppedBase64) // Use cropped image - it's the processed document
-          console.log('✅ Back image stored in state (TRUE-ID mode)')
+          console.log('💾 Storing back CROPPED image (TRUE-ID mode)...')
+          setBackImage(croppedBase64) // Cropped image contains only the ID card
+          console.log('✅ Back cropped image stored in state (TRUE-ID mode)')
         }
       } else {
-        // Simulation mode: Process Emirates ID with OCR
-        console.log('🔍 Processing with OCR...')
-        const result = await processEmiratesID(imageToProcess, captureSide)
+        // Simulation mode: Process with OCR using cropped image
+        console.log('🔍 Processing CROPPED image with OCR...')
+        const result = await processEmiratesID(croppedBase64, captureSide) // Use cropped image for OCR
         
         if (!result.success) {
           throw new Error(result.error || 'Failed to process Emirates ID')
@@ -332,14 +350,15 @@ export default function Step2EmiratesIDScan({ onComplete, onBack, service }: Ste
           setEidData(result.data)
         }
         
+        // Store only the cropped image (ID card frame only)
         if (captureSide === 'front') {
-          console.log('💾 Storing front image (OCR mode)...')
-          setFrontImage(imageToProcess)
-          console.log('✅ Front image stored in state (OCR mode)')
+          console.log('💾 Storing front CROPPED image (OCR mode)...')
+          setFrontImage(croppedBase64) // Always use cropped image
+          console.log('✅ Front cropped image stored in state (OCR mode)')
         } else if (captureSide === 'back') {
-          console.log('💾 Storing back image (OCR mode)...')
-          setBackImage(imageToProcess)
-          console.log('✅ Back image stored in state (OCR mode)')
+          console.log('💾 Storing back CROPPED image (OCR mode)...')
+          setBackImage(croppedBase64) // Always use cropped image
+          console.log('✅ Back cropped image stored in state (OCR mode)')
         }
       }
 
@@ -443,11 +462,15 @@ export default function Step2EmiratesIDScan({ onComplete, onBack, service }: Ste
         // Update blur score
         setLastBlurScore(blurScore)
 
-        // Check if document is detected and not blurry
-        if (detected && points && points.length >= 4 && blurScore >= MIN_BLUR_SCORE) {
+        // Check if document is detected - more lenient blur check (allow slightly blurry if detected)
+        // Back side might be harder to detect, so be even more lenient
+        const isBackSide = currentSideValue === 'back'
+        const blurThreshold = isBackSide ? MIN_BLUR_SCORE * 0.5 : MIN_BLUR_SCORE
+        const isBlurAcceptable = blurScore >= blurThreshold || blurScore >= (blurThreshold * 0.5)
+        if (detected && points && points.length >= 4 && isBlurAcceptable) {
           // Check if points are similar to last stable points (within threshold)
-          // More lenient threshold for mobile devices
-          const stabilityThreshold = isMobile ? 30 : 20
+          // Much more lenient threshold for easier capture, especially for back side
+          const stabilityThreshold = isBackSide ? (isMobile ? 60 : 50) : (isMobile ? 50 : 40)
           const pointsSimilar = lastStablePoints && points.length === lastStablePoints.length &&
             points.every((p, i) => {
               const lastP = lastStablePoints![i]
@@ -458,9 +481,11 @@ export default function Step2EmiratesIDScan({ onComplete, onBack, service }: Ste
 
           if (pointsSimilar && stableStart !== null) {
             // Points are stable, check duration
+            // Back side needs even shorter stability duration
+            const requiredStability = isBackSide ? (STABILITY_DURATION * 0.7) : STABILITY_DURATION
             const stableDuration = Date.now() - stableStart
             
-            if (stableDuration >= STABILITY_DURATION) {
+            if (stableDuration >= requiredStability) {
               // Document is stable and ready to capture - capture immediately
               if (!captureTriggeredRef.current) {
                 // Set flag immediately to prevent multiple captures
@@ -638,20 +663,66 @@ export default function Step2EmiratesIDScan({ onComplete, onBack, service }: Ste
       setIsProcessing(true)
       setError(null)
       setCameraError(null)
+      setProcessingMessage('Detecting and cropping ID card...')
       
       try {
+        // Try to detect and crop the document from the uploaded image
+        let croppedImage = imageBase64 // Fallback to full image if cropping fails
+        
+        try {
+          // Convert to OpenCV Mat
+          const img = new Image()
+          img.src = imageBase64
+          await new Promise((resolve, reject) => {
+            img.onload = resolve
+            img.onerror = reject
+            setTimeout(reject, 5000) // 5 second timeout
+          })
+          
+          const videoMat = imageToMat(img)
+          const points = detectDocumentInFrame(videoMat)
+          
+          if (points && points.length >= 4) {
+            console.log('✅ Document detected in uploaded image, cropping...')
+            const croppedMat = cropDocument(videoMat, points, 800, 500)
+            croppedImage = matToBase64(croppedMat)
+            console.log('✅ ID card frame cropped successfully from uploaded image')
+            
+            // Clean up
+            videoMat.delete()
+            croppedMat.delete()
+          } else {
+            console.warn('⚠️ Could not detect document in uploaded image, using full image')
+          }
+        } catch (cropError) {
+          console.warn('⚠️ Cropping failed for uploaded image, using full image:', cropError)
+          // Continue with full image as fallback
+        }
+        
+        // Validate that the image is actually an Emirates ID
+        setProcessingMessage('Validating Emirates ID card...')
+        const validationResult = await validateIsEmiratesID(croppedImage, side)
+        
+        if (!validationResult.isValid || !validationResult.isEmiratesID) {
+          throw new Error(
+            validationResult.error || 
+            `This does not appear to be an Emirates ID card. Please ensure you are uploading the ${side} of a valid Emirates ID.`
+          )
+        }
+        
         const useTrueID = !API_CONFIG.features.simulationMode
         
+        // Store only the cropped image (or full image if cropping failed)
         if (useTrueID) {
           await new Promise(resolve => setTimeout(resolve, 500))
           if (side === 'front') {
-            setFrontImage(imageBase64)
+            setFrontImage(croppedImage) // Store cropped image only
             setEidData({ captured: true, mode: 'TRUE-ID' })
           } else {
-            setBackImage(imageBase64)
+            setBackImage(croppedImage) // Store cropped image only
           }
         } else {
-          const result = await processEmiratesID(imageBase64, side)
+          const result = await processEmiratesID(croppedImage, side) // Use cropped image for OCR
           if (!result.success) {
             throw new Error(result.error || 'Failed to process Emirates ID')
           }
@@ -659,9 +730,9 @@ export default function Step2EmiratesIDScan({ onComplete, onBack, service }: Ste
             setEidData(result.data)
           }
           if (side === 'front') {
-            setFrontImage(imageBase64)
+            setFrontImage(croppedImage) // Store cropped image only
           } else {
-            setBackImage(imageBase64)
+            setBackImage(croppedImage) // Store cropped image only
           }
         }
         
@@ -999,8 +1070,11 @@ export default function Step2EmiratesIDScan({ onComplete, onBack, service }: Ste
                 <div className="flex-1 flex flex-col space-y-4">
                   {/* Instructions */}
                   <div className="bg-blue-50 border-l-4 border-blue-500 p-2 sm:p-3 rounded">
-                    <p className="text-xs sm:text-sm text-blue-800">
-                      <strong>Instructions:</strong> Position your Emirates ID card within the frame. {isMobile ? 'Hold steady for a moment.' : 'The system will automatically detect and capture when the card is clear and stable.'}
+                    <p className="text-xs sm:text-sm text-blue-800 mb-2">
+                      <strong>Instructions:</strong> Hold your phone at a comfortable distance (about 30-40cm away) and position your Emirates ID card within the centered frame. The system will automatically detect and capture when ready, or you can use the "Capture Manually" button below.
+                    </p>
+                    <p className="text-xs text-blue-700">
+                      💡 Tip: Keep the card steady for half a second. If auto-capture doesn't work, use the manual capture button.
                     </p>
                   </div>
 
@@ -1048,19 +1122,36 @@ export default function Step2EmiratesIDScan({ onComplete, onBack, service }: Ste
                         style={{ zIndex: 10 }}
                       />
                       
-                      {/* Guide frame - adaptive sizing for mobile */}
-                      <div className={`absolute inset-2 sm:inset-4 md:inset-8 border-2 sm:border-4 border-dashed rounded-lg pointer-events-none transition-all duration-300 ${
+                      {/* Guide frame - smaller, centered frame for better focus */}
+                      <div className={`absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-[70%] sm:w-[65%] md:w-[60%] aspect-[85.6/53.98] border-[3px] sm:border-4 border-dashed rounded-lg pointer-events-none transition-all duration-300 ${
                         detectionReady 
                           ? 'border-green-500 bg-green-500 bg-opacity-20 shadow-lg shadow-green-500/50' 
                           : detectedPoints 
                             ? 'border-yellow-400 bg-yellow-400 bg-opacity-10' 
-                            : 'border-gray-400'
-                      }`} />
+                            : 'border-gray-300'
+                      }`} 
+                      style={{ 
+                        maxWidth: isMobile ? '320px' : '400px',
+                        maxHeight: isMobile ? '200px' : '250px'
+                      }} />
                       
-                      {/* Detection status - adaptive for mobile */}
+                      {/* Corner guides for better alignment */}
+                      <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-[70%] sm:w-[65%] md:w-[60%] aspect-[85.6/53.98] pointer-events-none"
+                        style={{ 
+                          maxWidth: isMobile ? '320px' : '400px',
+                          maxHeight: isMobile ? '200px' : '250px'
+                        }}>
+                        {/* Corner markers */}
+                        <div className="absolute top-0 left-0 w-6 h-6 border-t-4 border-l-4 border-white rounded-tl-lg"></div>
+                        <div className="absolute top-0 right-0 w-6 h-6 border-t-4 border-r-4 border-white rounded-tr-lg"></div>
+                        <div className="absolute bottom-0 left-0 w-6 h-6 border-b-4 border-l-4 border-white rounded-bl-lg"></div>
+                        <div className="absolute bottom-0 right-0 w-6 h-6 border-b-4 border-r-4 border-white rounded-br-lg"></div>
+                      </div>
+                      
+                      {/* Detection status - positioned above the frame */}
                       {isDetecting && (
-                        <div className="absolute top-2 sm:top-4 md:top-6 left-2 sm:left-4 md:left-6 right-2 sm:right-4 md:right-6 z-20">
-                          <div className={`px-3 sm:px-4 md:px-6 py-2 sm:py-3 md:py-4 rounded-lg text-white text-sm sm:text-base md:text-lg font-bold shadow-lg ${
+                        <div className="absolute top-[calc(50%-15vh)] sm:top-[calc(50%-18vh)] left-1/2 transform -translate-x-1/2 z-20 w-[90%] sm:w-auto max-w-md">
+                          <div className={`px-3 sm:px-4 md:px-6 py-2 sm:py-3 md:py-4 rounded-lg text-white text-sm sm:text-base md:text-lg font-bold shadow-lg text-center ${
                             detectionReady 
                               ? 'bg-green-600 animate-pulse' 
                               : detectedPoints 
@@ -1071,7 +1162,7 @@ export default function Step2EmiratesIDScan({ onComplete, onBack, service }: Ste
                               ? '✓ Ready! Capturing...' 
                               : detectedPoints 
                                 ? `Hold steady... ${!isMobile ? `(Blur: ${lastBlurScore.toFixed(0)})` : ''}` 
-                                : 'Position ID card in frame'}
+                                : 'Position ID card in the centered frame'}
                           </div>
                         </div>
                       )}
@@ -1102,20 +1193,124 @@ export default function Step2EmiratesIDScan({ onComplete, onBack, service }: Ste
                   {isProcessing && (
                     <div className="text-center py-6">
                       <div className="animate-spin rounded-full h-16 w-16 border-b-4 border-green-600 mx-auto mb-4" />
-                      <p className="text-gray-600 text-lg font-semibold">Processing Emirates ID data...</p>
+                      <p className="text-gray-600 text-lg font-semibold">{processingMessage || 'Validating Emirates ID...'}</p>
                       <p className="text-sm text-gray-500 mt-2">Please wait, this may take a few seconds</p>
                     </div>
                   )}
 
-                  {/* Cancel button */}
+                  {/* Manual capture button and Cancel */}
                   {!isProcessing && !cameraError && opencvLoaded && (
-                    <button
-                      type="button"
-                      onClick={closeScanModal}
-                      className="btn-secondary w-full py-3 text-lg"
-                    >
-                      Cancel & Close
-                    </button>
+                    <div className="space-y-3">
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          if (webcamRef.current && currentSide && videoRef.current) {
+                            setIsProcessing(true)
+                            setError(null)
+                            try {
+                              const imageSrc = webcamRef.current.getScreenshot()
+                              if (imageSrc) {
+                                console.log('📸 Manual capture: Attempting to crop ID card frame...')
+                                setProcessingMessage('Detecting and cropping ID card...')
+                                
+                                // Try to detect and crop the document from the screenshot
+                                let croppedImage = imageSrc // Fallback to full image if cropping fails
+                                
+                                try {
+                                  // Convert screenshot to OpenCV Mat
+                                  const img = new Image()
+                                  img.src = imageSrc
+                                  await new Promise((resolve, reject) => {
+                                    img.onload = resolve
+                                    img.onerror = reject
+                                    setTimeout(reject, 5000) // 5 second timeout
+                                  })
+                                  
+                                  const videoMat = imageToMat(img)
+                                  const points = detectDocumentInFrame(videoMat)
+                                  
+                                  if (points && points.length >= 4) {
+                                    console.log('✅ Document detected in manual capture, cropping...')
+                                    const croppedMat = cropDocument(videoMat, points, 800, 500)
+                                    croppedImage = matToBase64(croppedMat)
+                                    console.log('✅ ID card frame cropped successfully')
+                                    
+                                    // Clean up
+                                    videoMat.delete()
+                                    croppedMat.delete()
+                                  } else {
+                                    console.warn('⚠️ Could not detect document in manual capture, using full image')
+                                  }
+                                } catch (cropError) {
+                                  console.warn('⚠️ Cropping failed for manual capture, using full image:', cropError)
+                                  // Continue with full image as fallback
+                                }
+                                
+                                // Validate that the captured image is actually an Emirates ID
+                                console.log('🔍 Validating manually captured image...')
+                                setProcessingMessage('Validating Emirates ID card...')
+                                const validationResult = await validateIsEmiratesID(croppedImage, currentSide)
+                                
+                                if (!validationResult.isValid || !validationResult.isEmiratesID) {
+                                  throw new Error(
+                                    validationResult.error || 
+                                    `This does not appear to be an Emirates ID card. Please ensure you are scanning the ${currentSide} of a valid Emirates ID.`
+                                  )
+                                }
+                                
+                                console.log('✅ Emirates ID validation passed for manual capture')
+                                
+                                // Store only the cropped image (or full image if cropping failed)
+                                const useTrueID = !API_CONFIG.features.simulationMode
+                                if (useTrueID) {
+                                  if (currentSide === 'front') {
+                                    setFrontImage(croppedImage) // Store cropped image only
+                                    setEidData({ captured: true, mode: 'TRUE-ID' })
+                                  } else {
+                                    setBackImage(croppedImage) // Store cropped image only
+                                  }
+                                } else {
+                                  const result = await processEmiratesID(croppedImage, currentSide) // Use cropped image for OCR
+                                  if (!result.success) {
+                                    throw new Error(result.error || 'Failed to process Emirates ID')
+                                  }
+                                  if (currentSide === 'front' && result.data) {
+                                    setEidData(result.data)
+                                  }
+                                  if (currentSide === 'front') {
+                                    setFrontImage(croppedImage) // Store cropped image only
+                                  } else {
+                                    setBackImage(croppedImage) // Store cropped image only
+                                  }
+                                }
+                                setIsProcessing(false)
+                                setCurrentSide(null)
+                                setTimeout(() => {
+                                  setModalOpen(false)
+                                  setModalSide(null)
+                                  stopAutoDetection()
+                                }, 500)
+                              }
+                            } catch (err) {
+                              console.error('Manual capture error:', err)
+                              setError(err instanceof Error ? err.message : 'Failed to capture image')
+                              setIsProcessing(false)
+                            }
+                          }
+                        }}
+                        className="btn-primary w-full py-3 text-lg flex items-center justify-center gap-2"
+                      >
+                        <Camera className="w-5 h-5" />
+                        Capture Manually
+                      </button>
+                      <button
+                        type="button"
+                        onClick={closeScanModal}
+                        className="btn-secondary w-full py-3 text-lg"
+                      >
+                        Cancel & Close
+                      </button>
+                    </div>
                   )}
                   
                   {/* Loading indicator */}
@@ -1220,9 +1415,12 @@ export default function Step2EmiratesIDScan({ onComplete, onBack, service }: Ste
               {currentSide === 'back' && !backImage ? (
                 <div className="flex-1 flex flex-col space-y-4">
                   {/* Instructions */}
-                  <div className="bg-blue-50 border-l-4 border-blue-500 p-3 rounded">
-                    <p className="text-sm text-blue-800">
-                      <strong>Instructions:</strong> Position your Emirates ID card (back side) within the frame. The system will automatically detect and capture when the card is clear and stable.
+                  <div className="bg-blue-50 border-l-4 border-blue-500 p-2 sm:p-3 rounded">
+                    <p className="text-xs sm:text-sm text-blue-800 mb-2">
+                      <strong>Instructions:</strong> Hold your phone at a comfortable distance (about 30-40cm away) and position your Emirates ID card (back side) within the centered frame. The system will automatically detect and capture when ready, or you can use the "Capture Manually" button below.
+                    </p>
+                    <p className="text-xs text-blue-700">
+                      💡 Tip: Keep the card steady for half a second. If auto-capture doesn't work, use the manual capture button.
                     </p>
                   </div>
 
@@ -1270,19 +1468,36 @@ export default function Step2EmiratesIDScan({ onComplete, onBack, service }: Ste
                         style={{ zIndex: 10 }}
                       />
                       
-                      {/* Guide frame - adaptive sizing for mobile */}
-                      <div className={`absolute inset-2 sm:inset-4 md:inset-8 border-2 sm:border-4 border-dashed rounded-lg pointer-events-none transition-all duration-300 ${
+                      {/* Guide frame - smaller, centered frame for better focus */}
+                      <div className={`absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-[70%] sm:w-[65%] md:w-[60%] aspect-[85.6/53.98] border-[3px] sm:border-4 border-dashed rounded-lg pointer-events-none transition-all duration-300 ${
                         detectionReady 
                           ? 'border-green-500 bg-green-500 bg-opacity-20 shadow-lg shadow-green-500/50' 
                           : detectedPoints 
                             ? 'border-yellow-400 bg-yellow-400 bg-opacity-10' 
-                            : 'border-gray-400'
-                      }`} />
+                            : 'border-gray-300'
+                      }`} 
+                      style={{ 
+                        maxWidth: isMobile ? '320px' : '400px',
+                        maxHeight: isMobile ? '200px' : '250px'
+                      }} />
                       
-                      {/* Detection status - adaptive for mobile */}
+                      {/* Corner guides for better alignment */}
+                      <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-[70%] sm:w-[65%] md:w-[60%] aspect-[85.6/53.98] pointer-events-none"
+                        style={{ 
+                          maxWidth: isMobile ? '320px' : '400px',
+                          maxHeight: isMobile ? '200px' : '250px'
+                        }}>
+                        {/* Corner markers */}
+                        <div className="absolute top-0 left-0 w-6 h-6 border-t-4 border-l-4 border-white rounded-tl-lg"></div>
+                        <div className="absolute top-0 right-0 w-6 h-6 border-t-4 border-r-4 border-white rounded-tr-lg"></div>
+                        <div className="absolute bottom-0 left-0 w-6 h-6 border-b-4 border-l-4 border-white rounded-bl-lg"></div>
+                        <div className="absolute bottom-0 right-0 w-6 h-6 border-b-4 border-r-4 border-white rounded-br-lg"></div>
+                      </div>
+                      
+                      {/* Detection status - positioned above the frame */}
                       {isDetecting && (
-                        <div className="absolute top-2 sm:top-4 md:top-6 left-2 sm:left-4 md:left-6 right-2 sm:right-4 md:right-6 z-20">
-                          <div className={`px-3 sm:px-4 md:px-6 py-2 sm:py-3 md:py-4 rounded-lg text-white text-sm sm:text-base md:text-lg font-bold shadow-lg ${
+                        <div className="absolute top-[calc(50%-15vh)] sm:top-[calc(50%-18vh)] left-1/2 transform -translate-x-1/2 z-20 w-[90%] sm:w-auto max-w-md">
+                          <div className={`px-3 sm:px-4 md:px-6 py-2 sm:py-3 md:py-4 rounded-lg text-white text-sm sm:text-base md:text-lg font-bold shadow-lg text-center ${
                             detectionReady 
                               ? 'bg-green-600 animate-pulse' 
                               : detectedPoints 
@@ -1293,7 +1508,7 @@ export default function Step2EmiratesIDScan({ onComplete, onBack, service }: Ste
                               ? '✓ Ready! Capturing...' 
                               : detectedPoints 
                                 ? `Hold steady... ${!isMobile ? `(Blur: ${lastBlurScore.toFixed(0)})` : ''}` 
-                                : 'Position ID card in frame'}
+                                : 'Position ID card in the centered frame'}
                           </div>
                         </div>
                       )}
@@ -1324,20 +1539,124 @@ export default function Step2EmiratesIDScan({ onComplete, onBack, service }: Ste
                   {isProcessing && (
                     <div className="text-center py-6">
                       <div className="animate-spin rounded-full h-16 w-16 border-b-4 border-green-600 mx-auto mb-4" />
-                      <p className="text-gray-600 text-lg font-semibold">Processing Emirates ID data...</p>
+                      <p className="text-gray-600 text-lg font-semibold">{processingMessage || 'Validating Emirates ID...'}</p>
                       <p className="text-sm text-gray-500 mt-2">Please wait, this may take a few seconds</p>
                     </div>
                   )}
 
-                  {/* Cancel button */}
+                  {/* Manual capture button and Cancel */}
                   {!isProcessing && !cameraError && opencvLoaded && (
-                    <button
-                      type="button"
-                      onClick={closeScanModal}
-                      className="btn-secondary w-full py-3 text-lg"
-                    >
-                      Cancel & Close
-                    </button>
+                    <div className="space-y-3">
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          if (webcamRef.current && currentSide && videoRef.current) {
+                            setIsProcessing(true)
+                            setError(null)
+                            try {
+                              const imageSrc = webcamRef.current.getScreenshot()
+                              if (imageSrc) {
+                                console.log('📸 Manual capture: Attempting to crop ID card frame...')
+                                setProcessingMessage('Detecting and cropping ID card...')
+                                
+                                // Try to detect and crop the document from the screenshot
+                                let croppedImage = imageSrc // Fallback to full image if cropping fails
+                                
+                                try {
+                                  // Convert screenshot to OpenCV Mat
+                                  const img = new Image()
+                                  img.src = imageSrc
+                                  await new Promise((resolve, reject) => {
+                                    img.onload = resolve
+                                    img.onerror = reject
+                                    setTimeout(reject, 5000) // 5 second timeout
+                                  })
+                                  
+                                  const videoMat = imageToMat(img)
+                                  const points = detectDocumentInFrame(videoMat)
+                                  
+                                  if (points && points.length >= 4) {
+                                    console.log('✅ Document detected in manual capture, cropping...')
+                                    const croppedMat = cropDocument(videoMat, points, 800, 500)
+                                    croppedImage = matToBase64(croppedMat)
+                                    console.log('✅ ID card frame cropped successfully')
+                                    
+                                    // Clean up
+                                    videoMat.delete()
+                                    croppedMat.delete()
+                                  } else {
+                                    console.warn('⚠️ Could not detect document in manual capture, using full image')
+                                  }
+                                } catch (cropError) {
+                                  console.warn('⚠️ Cropping failed for manual capture, using full image:', cropError)
+                                  // Continue with full image as fallback
+                                }
+                                
+                                // Validate that the captured image is actually an Emirates ID
+                                console.log('🔍 Validating manually captured image...')
+                                setProcessingMessage('Validating Emirates ID card...')
+                                const validationResult = await validateIsEmiratesID(croppedImage, currentSide)
+                                
+                                if (!validationResult.isValid || !validationResult.isEmiratesID) {
+                                  throw new Error(
+                                    validationResult.error || 
+                                    `This does not appear to be an Emirates ID card. Please ensure you are scanning the ${currentSide} of a valid Emirates ID.`
+                                  )
+                                }
+                                
+                                console.log('✅ Emirates ID validation passed for manual capture')
+                                
+                                // Store only the cropped image (or full image if cropping failed)
+                                const useTrueID = !API_CONFIG.features.simulationMode
+                                if (useTrueID) {
+                                  if (currentSide === 'front') {
+                                    setFrontImage(croppedImage) // Store cropped image only
+                                    setEidData({ captured: true, mode: 'TRUE-ID' })
+                                  } else {
+                                    setBackImage(croppedImage) // Store cropped image only
+                                  }
+                                } else {
+                                  const result = await processEmiratesID(croppedImage, currentSide) // Use cropped image for OCR
+                                  if (!result.success) {
+                                    throw new Error(result.error || 'Failed to process Emirates ID')
+                                  }
+                                  if (currentSide === 'front' && result.data) {
+                                    setEidData(result.data)
+                                  }
+                                  if (currentSide === 'front') {
+                                    setFrontImage(croppedImage) // Store cropped image only
+                                  } else {
+                                    setBackImage(croppedImage) // Store cropped image only
+                                  }
+                                }
+                                setIsProcessing(false)
+                                setCurrentSide(null)
+                                setTimeout(() => {
+                                  setModalOpen(false)
+                                  setModalSide(null)
+                                  stopAutoDetection()
+                                }, 500)
+                              }
+                            } catch (err) {
+                              console.error('Manual capture error:', err)
+                              setError(err instanceof Error ? err.message : 'Failed to capture image')
+                              setIsProcessing(false)
+                            }
+                          }
+                        }}
+                        className="btn-primary w-full py-3 text-lg flex items-center justify-center gap-2"
+                      >
+                        <Camera className="w-5 h-5" />
+                        Capture Manually
+                      </button>
+                      <button
+                        type="button"
+                        onClick={closeScanModal}
+                        className="btn-secondary w-full py-3 text-lg"
+                      >
+                        Cancel & Close
+                      </button>
+                    </div>
                   )}
                   
                   {/* Loading indicator */}

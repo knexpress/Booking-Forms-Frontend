@@ -215,9 +215,9 @@ export function findDocumentContour(src: any): any[] | null {
     const blurSize = isMobile ? 7 : 5;
     window.cv.GaussianBlur(gray, blur, new window.cv.Size(blurSize, blurSize), 0);
 
-    // Apply Canny edge detection - lower thresholds for mobile (better detection in lower light)
-    const cannyLow = isMobile ? 30 : 50;
-    const cannyHigh = isMobile ? 100 : 150;
+    // Apply Canny edge detection - much lower thresholds for easier detection
+    const cannyLow = isMobile ? 20 : 30;
+    const cannyHigh = isMobile ? 80 : 120;
     window.cv.Canny(blur, edges, cannyLow, cannyHigh);
 
     // Find contours
@@ -237,8 +237,8 @@ export function findDocumentContour(src: any): any[] | null {
       const contour = contours.get(i);
       const area = window.cv.contourArea(contour);
 
-      // Adaptive minimum area threshold - lower for mobile devices
-      const minArea = isMobile ? 5000 : 10000;
+      // Adaptive minimum area threshold - much lower for easier detection
+      const minArea = isMobile ? 3000 : 6000;
       if (area > maxArea && area > minArea) {
         // Approximate contour to polygon - more lenient epsilon for mobile
         const epsilonFactor = isMobile ? 0.03 : 0.02;

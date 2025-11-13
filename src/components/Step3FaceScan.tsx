@@ -1,10 +1,17 @@
 import { useState, useRef, useCallback, useEffect } from 'react'
 import Webcam from 'react-webcam'
-import { Camera, CheckCircle, XCircle, ArrowLeft, Eye } from 'lucide-react'
+import { Camera, CheckCircle, XCircle, ArrowLeft, Eye, Maximize2, Smile, RotateCw } from 'lucide-react'
 import { VerificationData } from '../types'
 import { verifyFace, detectLiveness } from '../services/faceRecognitionService'
 import { validateWithTrueID, getTrueIDStatusMessage } from '../services/trueIdService'
 import { API_CONFIG } from '../config/api.config'
+import { 
+  loadFaceModels, 
+  detectFaceInFrame, 
+  isFacePositionValid,
+  FaceDetectionResult 
+} from '../services/faceDetectionService'
+import FaceScanModal from './FaceScanModal'
 
 interface Step3Props {
   onComplete: (data: Partial<VerificationData>) => void
@@ -29,6 +36,9 @@ export default function Step3FaceScan({ onComplete, onBack, eidImage, eidBackIma
   const isPhToUae = route === 'ph-to-uae'
   const routeDisplay = isPhToUae ? 'PHILIPPINES TO UAE' : 'UAE TO PHILIPPINES'
   const webcamRef = useRef<Webcam>(null)
+  const videoRef = useRef<HTMLVideoElement | null>(null)
+  const canvasRef = useRef<HTMLCanvasElement | null>(null)
+  const detectionIntervalRef = useRef<number | null>(null)
   const [isScanning, setIsScanning] = useState(false)
   const [isProcessing, setIsProcessing] = useState(false)
   const [faceImage, setFaceImage] = useState<string | null>(null) // Last captured image for display
@@ -40,8 +50,32 @@ export default function Step3FaceScan({ onComplete, onBack, eidImage, eidBackIma
   const [verificationResult, setVerificationResult] = useState<any>(null)
   const [livenessResult, setLivenessResult] = useState<any>(null)
   const [cameraError, setCameraError] = useState<string | null>(null)
+  const [modalOpen, setModalOpen] = useState(false)
+  const [faceModelsLoaded, setFaceModelsLoaded] = useState(false)
+  const [faceDetection, setFaceDetection] = useState<FaceDetectionResult | null>(null)
+  const [isDetecting, setIsDetecting] = useState(false)
+  const [detectionReady, setDetectionReady] = useState(false)
+  const [stabilityStartTime, setStabilityStartTime] = useState<number | null>(null)
+  
+  // Detect if device is mobile
+  const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent) || window.innerWidth < 768
+  // Relaxed stability duration - shorter wait time for easier capture
+  const STABILITY_DURATION = isMobile ? 300 : 400
 
   const allActions: Exclude<LivenessAction, null>[] = ['blink', 'smile', 'turn-left']
+  
+  // Load face models on mount
+  useEffect(() => {
+    loadFaceModels()
+      .then(() => {
+        setFaceModelsLoaded(true)
+        console.log('✅ Face detection models loaded')
+      })
+      .catch((err) => {
+        console.error('❌ Failed to load face models:', err)
+        // Continue without auto-detection - manual capture still works
+      })
+  }, [])
 
   const requestCameraPermission = async () => {
     try {
@@ -66,28 +100,202 @@ export default function Step3FaceScan({ onComplete, onBack, eidImage, eidBackIma
     }
   }
 
+  // Stop auto-detection
+  const stopAutoDetection = useCallback(() => {
+    if (detectionIntervalRef.current) {
+      clearInterval(detectionIntervalRef.current)
+      detectionIntervalRef.current = null
+    }
+    setIsDetecting(false)
+    setDetectionReady(false)
+    setStabilityStartTime(null)
+    setFaceDetection(null)
+  }, [])
+
+  // Draw face detection overlay
+  const drawFaceDetection = useCallback((detection: FaceDetectionResult | null, canvas: HTMLCanvasElement, video: HTMLVideoElement, isReady: boolean = false) => {
+    if (!canvas || !video) return
+
+    const ctx = canvas.getContext('2d')
+    if (!ctx) return
+
+    // Set canvas size to match video
+    const videoWidth = video.videoWidth || video.clientWidth
+    const videoHeight = video.videoHeight || video.clientHeight
+    
+    if (canvas.width !== videoWidth || canvas.height !== videoHeight) {
+      canvas.width = videoWidth
+      canvas.height = videoHeight
+    }
+
+    // Clear canvas
+    ctx.clearRect(0, 0, canvas.width, canvas.height)
+
+    if (detection && detection.detected && detection.faceBox) {
+      const { x, y, width, height } = detection.faceBox
+      
+      // Draw face box
+      ctx.strokeStyle = isReady ? '#10b981' : '#eab308'
+      ctx.lineWidth = 3
+      ctx.strokeRect(x, y, width, height)
+
+      // Draw landmarks if available
+      if (detection.landmarks) {
+        ctx.fillStyle = isReady ? '#10b981' : '#eab308'
+        const landmarks = [
+          detection.landmarks.leftEye,
+          detection.landmarks.rightEye,
+          detection.landmarks.nose,
+          detection.landmarks.mouth,
+        ]
+        landmarks.forEach(landmark => {
+          ctx.beginPath()
+          ctx.arc(landmark.x, landmark.y, 3, 0, 2 * Math.PI)
+          ctx.fill()
+        })
+      }
+    }
+  }, [])
+
+  // Auto-capture face when conditions are met
+  const autoCaptureFace = useCallback(async (action: LivenessAction) => {
+    if (!webcamRef.current || !action) return
+
+    console.log(`📸 Auto-capturing face for action: ${action}`)
+    setIsProcessing(true)
+    setError(null)
+
+    try {
+      const imageSrc = webcamRef.current.getScreenshot()
+      if (imageSrc) {
+        setFaceImages(prev => {
+          const updated = [...prev, imageSrc]
+          console.log(`✅ Captured image for action: ${action}`)
+          console.log(`📸 Total images captured: ${updated.length}`)
+          return updated
+        })
+
+        // Mark action as completed
+        setCompletedActions(prev => {
+          const updated = [...prev, action]
+          console.log('✅ Action completed:', action)
+          return updated
+        })
+
+        setIsProcessing(false)
+        stopAutoDetection()
+      }
+    } catch (err) {
+      console.error('Auto-capture error:', err)
+      setError('Failed to capture image. Please try again.')
+      setIsProcessing(false)
+    }
+  }, [stopAutoDetection])
+
+  // Start auto-detection for current action
+  const startAutoDetection = useCallback((action: LivenessAction) => {
+    if (!faceModelsLoaded || !videoRef.current || detectionIntervalRef.current || !action) {
+      return
+    }
+
+    setIsDetecting(true)
+    setDetectionReady(false)
+    setStabilityStartTime(null)
+    setFaceDetection(null)
+
+    let lastValidDetection: FaceDetectionResult | null = null
+    let stableStart: number | null = null
+
+    console.log(`🔍 Starting face detection for action: ${action}`)
+
+    detectionIntervalRef.current = window.setInterval(async () => {
+      if (!videoRef.current || !canvasRef.current) return
+
+      try {
+        const detection = await detectFaceInFrame(videoRef.current)
+        setFaceDetection(detection)
+
+        if (detection && detection.detected) {
+          const validation = isFacePositionValid(detection, action)
+
+          if (validation.valid) {
+            // Check if detection is stable - relaxed threshold for easier capture
+            const stabilityThreshold = isMobile ? 40 : 30 // Increased from 20 to allow more movement
+            const isStable = lastValidDetection && 
+              Math.abs((detection.faceBox?.x || 0) - (lastValidDetection.faceBox?.x || 0)) < stabilityThreshold &&
+              Math.abs((detection.faceBox?.y || 0) - (lastValidDetection.faceBox?.y || 0)) < stabilityThreshold
+
+            if (isStable && stableStart !== null) {
+              const stableDuration = Date.now() - stableStart
+              
+              if (stableDuration >= STABILITY_DURATION) {
+                // Face is stable and ready - capture automatically
+                if (detectionIntervalRef.current) {
+                  clearInterval(detectionIntervalRef.current)
+                  detectionIntervalRef.current = null
+                }
+                
+                setDetectionReady(true)
+                drawFaceDetection(detection, canvasRef.current, videoRef.current, true)
+                
+                // Auto-capture
+                await autoCaptureFace(action)
+                return
+              } else {
+                setDetectionReady(false)
+              }
+            } else {
+              stableStart = Date.now()
+              lastValidDetection = detection
+              setDetectionReady(false)
+            }
+          } else {
+            stableStart = null
+            lastValidDetection = null
+            setDetectionReady(false)
+          }
+
+          drawFaceDetection(detection, canvasRef.current, videoRef.current, false)
+        } else {
+          setDetectionReady(false)
+          drawFaceDetection(null, canvasRef.current, videoRef.current, false)
+        }
+      } catch (error) {
+        console.error('Face detection error:', error)
+      }
+    }, 200) // Check every 200ms
+  }, [faceModelsLoaded, STABILITY_DURATION, drawFaceDetection, autoCaptureFace])
+
   const startScan = async () => {
     setError(null)
     setSuccess(false)
-    setFaceImages([]) // Reset images array
-    setFaceImage(null) // Reset display image
+    setFaceImages([])
+    setFaceImage(null)
     
-    // If there was a previous camera error, try requesting permission again
     if (cameraError) {
       const granted = await requestCameraPermission()
       if (!granted) {
-        return // Permission still denied, keep showing error
+        return
       }
     }
     
     setCameraError(null)
     setCompletedActions([])
     setCurrentAction(null)
-    // Start with first action after state reset
+    setModalOpen(true)
+    
+    // Start with first action after modal opens
     setTimeout(() => {
       setIsScanning(true)
-      setCurrentAction(allActions[0]) // Set first action immediately
-    }, 0)
+      setCurrentAction(allActions[0])
+    }, 300)
+  }
+
+  const closeFaceModal = () => {
+    stopAutoDetection()
+    setIsScanning(false)
+    setCurrentAction(null)
+    setModalOpen(false)
   }
   
   const handleCameraError = (error: string | DOMException | Error) => {
@@ -254,22 +462,45 @@ export default function Step3FaceScan({ onComplete, onBack, eidImage, eidBackIma
     }
   }, [faceImages, faceImage, eidImage, eidBackImage, onComplete])
 
+  // Get video element from webcam
+  useEffect(() => {
+    if (webcamRef.current && isScanning) {
+      const video = webcamRef.current.video
+      if (video) {
+        videoRef.current = video
+      }
+    }
+  }, [isScanning, webcamRef])
+
+  // Start auto-detection when action changes
+  useEffect(() => {
+    if (isScanning && currentAction && videoRef.current && faceModelsLoaded && !completedActions.includes(currentAction)) {
+      // Small delay to ensure video is ready
+      setTimeout(() => {
+        startAutoDetection(currentAction)
+      }, 500)
+    }
+
+    return () => {
+      stopAutoDetection()
+    }
+  }, [isScanning, currentAction, faceModelsLoaded, completedActions, startAutoDetection, stopAutoDetection])
+
+  // Move to next action when current is completed
   useEffect(() => {
     if (isScanning && completedActions.length < allActions.length) {
-      // Get next action that hasn't been completed yet
       const nextAction = allActions.find(action => !completedActions.includes(action))
       if (nextAction && nextAction !== currentAction) {
         console.log('🔄 Moving to next action:', nextAction)
         setCurrentAction(nextAction)
-      } else if (!nextAction) {
-        console.log('⚠️ No next action found, but not all completed')
       }
     } else if (completedActions.length === allActions.length && isScanning && !isProcessing) {
-      // All actions completed, perform final verification with all captured images
+      // All actions completed, perform final verification
       console.log('✅ All actions completed, starting final verification')
+      stopAutoDetection()
       performFinalVerification()
     }
-  }, [isScanning, completedActions, isProcessing, performFinalVerification, currentAction])
+  }, [isScanning, completedActions, isProcessing, performFinalVerification, currentAction, stopAutoDetection])
 
   const retake = () => {
     setFaceImage(null)
@@ -360,107 +591,10 @@ export default function Step3FaceScan({ onComplete, onBack, eidImage, eidBackIma
               onClick={startScan}
               className="btn-primary w-full flex items-center justify-center gap-2 text-lg py-4"
             >
+              <Maximize2 className="w-5 h-5" />
               <Camera className="w-5 h-5" />
-              Start Face Scan
+              Start Face Scan (Full Screen)
             </button>
-          </div>
-        ) : isScanning && !faceImage ? (
-          <div className="space-y-4">
-            <div className="relative bg-black rounded-lg overflow-hidden aspect-video">
-              <Webcam
-                ref={webcamRef}
-                audio={false}
-                screenshotFormat="image/jpeg"
-                mirrored={true}
-                className="w-full h-full object-cover"
-                videoConstraints={{
-                  facingMode: 'user'
-                }}
-                onUserMedia={() => {
-                  console.log('✅ Face camera loaded')
-                  setCameraError(null)
-                }}
-                onUserMediaError={(err) => handleCameraError(err)}
-              />
-              
-              {/* Face oval overlay */}
-              <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                <div className="relative w-64 h-80">
-                  <svg viewBox="0 0 200 250" className="w-full h-full">
-                    <ellipse
-                      cx="100"
-                      cy="125"
-                      rx="90"
-                      ry="115"
-                      fill="none"
-                      stroke={completedActions.length === allActions.length ? '#22c55e' : '#10b981'}
-                      strokeWidth="4"
-                      strokeDasharray={completedActions.length === allActions.length ? '0' : '10,5'}
-                      className="animate-pulse"
-                    />
-                  </svg>
-                </div>
-              </div>
-
-              {/* Current action prompt */}
-              {currentAction && (
-                <div className="absolute bottom-4 left-0 right-0 text-center">
-                  <div className="bg-black bg-opacity-70 text-white px-6 py-3 rounded-full inline-block">
-                    <p className="text-lg font-semibold">{livenessInstructions[currentAction]}</p>
-                  </div>
-                </div>
-              )}
-
-              {/* Progress indicators */}
-              <div className="absolute top-4 right-4 flex gap-2">
-                {allActions.map((action, index) => (
-                  <div
-                    key={action}
-                    className={`w-3 h-3 rounded-full ${
-                      completedActions.includes(action)
-                        ? 'bg-green-500'
-                        : currentAction === action
-                        ? 'bg-yellow-400 animate-pulse'
-                        : 'bg-gray-400'
-                    }`}
-                  />
-                ))}
-              </div>
-            </div>
-
-            {isProcessing ? (
-              <div className="text-center py-4">
-                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600 mx-auto mb-2" />
-                {API_CONFIG.features.simulationMode ? (
-                  <>
-                    <p className="text-gray-600">Analyzing facial biometrics...</p>
-                    <p className="text-xs text-gray-500 mt-2">This may take a few moments...</p>
-                  </>
-                ) : (
-                  <>
-                    <p className="text-gray-600 font-semibold">Verifying with TRUE-ID API...</p>
-                    <p className="text-sm text-gray-500 mt-2">Validating Emirates ID and face match</p>
-                    <p className="text-xs text-gray-400 mt-1">Please wait while we verify your identity</p>
-                  </>
-                )}
-              </div>
-            ) : currentAction ? (
-              <div className="text-center">
-                <p className="text-gray-600 mb-4">
-                  Action {completedActions.length + 1} of {allActions.length}
-                </p>
-                <button
-                  type="button"
-                  onClick={simulateActionCompletion}
-                  className="btn-primary"
-                >
-                  I've Completed This Action
-                </button>
-                <p className="text-xs text-gray-500 mt-2">
-                  (In production, this will be detected automatically)
-                </p>
-              </div>
-            ) : null}
           </div>
         ) : faceImage ? (
           <div className="space-y-4">
@@ -540,6 +674,211 @@ export default function Step3FaceScan({ onComplete, onBack, eidImage, eidBackIma
           </div>
         </div>
       </div>
+
+      {/* Face Scan Modal */}
+      <FaceScanModal
+        isOpen={modalOpen}
+        onClose={closeFaceModal}
+        title="Face Scan - Full Screen View"
+      >
+        <div className="flex flex-col h-full max-h-[85vh]">
+          {isScanning && currentAction && !completedActions.includes(currentAction) ? (
+            <div className="flex-1 flex flex-col space-y-4">
+              {/* Instructions */}
+              <div className="bg-blue-50 border-l-4 border-blue-500 p-2 sm:p-3 rounded">
+                <p className="text-xs sm:text-sm text-blue-800 mb-2">
+                  <strong>Action {completedActions.length + 1} of {allActions.length}:</strong> {livenessInstructions[currentAction]}
+                </p>
+                {faceDetection && !isFacePositionValid(faceDetection, currentAction).valid && (
+                  <p className="text-xs text-blue-700 mt-1">
+                    💡 {isFacePositionValid(faceDetection, currentAction).reason}
+                  </p>
+                )}
+                {faceDetection?.angle && (
+                  <p className="text-xs text-blue-600 mt-1">
+                    Angle: Pitch {faceDetection.angle.pitch.toFixed(1)}° | Yaw {faceDetection.angle.yaw.toFixed(1)}° | Roll {faceDetection.angle.roll.toFixed(1)}°
+                  </p>
+                )}
+              </div>
+
+              {/* Camera View */}
+              {!cameraError ? (
+                <div className="relative bg-black rounded-lg overflow-hidden flex-1 min-h-[40vh] sm:min-h-[50vh] flex items-center justify-center">
+                  <Webcam
+                    ref={webcamRef}
+                    audio={false}
+                    screenshotFormat="image/jpeg"
+                    screenshotQuality={isMobile ? 0.85 : 0.95}
+                    mirrored={true}
+                    className="w-full h-full object-cover"
+                    videoConstraints={{
+                      width: isMobile ? { ideal: 1280, max: 1920 } : { ideal: 1920 },
+                      height: isMobile ? { ideal: 720, max: 1080 } : { ideal: 1080 },
+                      facingMode: 'user',
+                      aspectRatio: { ideal: 16/9 }
+                    }}
+                    onUserMedia={(stream) => {
+                      console.log('✅ Face camera loaded in modal')
+                      setCameraError(null)
+                      setError(null)
+                      setTimeout(() => {
+                        if (webcamRef.current?.video) {
+                          videoRef.current = webcamRef.current.video
+                        }
+                      }, 500)
+                    }}
+                    onUserMediaError={(err) => {
+                      console.error('❌ Face camera error in modal:', err)
+                      handleCameraError(err)
+                    }}
+                    forceScreenshotSourceSize={true}
+                  />
+                  
+                  {/* Face detection overlay canvas */}
+                  <canvas
+                    ref={canvasRef}
+                    className="absolute inset-0 w-full h-full pointer-events-none"
+                    style={{ zIndex: 10 }}
+                  />
+                  
+                  {/* Face guide oval - centered */}
+                  <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-[60%] sm:w-[55%] md:w-[50%] aspect-[3/4] pointer-events-none">
+                    <svg viewBox="0 0 200 250" className="w-full h-full">
+                      <ellipse
+                        cx="100"
+                        cy="125"
+                        rx="90"
+                        ry="115"
+                        fill="none"
+                        stroke={detectionReady ? '#22c55e' : faceDetection?.detected ? '#eab308' : '#6b7280'}
+                        strokeWidth="4"
+                        strokeDasharray={detectionReady ? '0' : '10,5'}
+                        className={detectionReady ? 'animate-pulse' : ''}
+                      />
+                    </svg>
+                  </div>
+
+                  {/* Detection status */}
+                  {isDetecting && (
+                    <div className="absolute top-2 sm:top-4 md:top-6 left-1/2 transform -translate-x-1/2 z-20 w-[90%] sm:w-auto max-w-md">
+                      <div className={`px-3 sm:px-4 md:px-6 py-2 sm:py-3 md:py-4 rounded-lg text-white text-sm sm:text-base md:text-lg font-bold shadow-lg text-center ${
+                        detectionReady 
+                          ? 'bg-green-600 animate-pulse' 
+                          : faceDetection?.detected 
+                            ? 'bg-yellow-600' 
+                            : 'bg-blue-600'
+                      }`}>
+                        {detectionReady 
+                          ? '✓ Ready! Capturing...' 
+                          : faceDetection?.detected 
+                            ? (isFacePositionValid(faceDetection, currentAction).valid 
+                                ? 'Hold steady...' 
+                                : isFacePositionValid(faceDetection, currentAction).reason || 'Adjust your position')
+                            : 'Position your face in the frame'}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Progress indicators */}
+                  <div className="absolute top-2 sm:top-4 right-2 sm:right-4 flex gap-2 z-20">
+                    {allActions.map((action) => (
+                      <div
+                        key={action}
+                        className={`w-3 h-3 rounded-full ${
+                          completedActions.includes(action)
+                            ? 'bg-green-500'
+                            : currentAction === action
+                            ? 'bg-yellow-400 animate-pulse'
+                            : 'bg-gray-400'
+                        }`}
+                      />
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                <div className="flex-1 bg-gray-100 rounded-lg p-8 text-center flex items-center justify-center min-h-[40vh]">
+                  <div>
+                    <Camera className="w-20 h-20 text-gray-400 mx-auto mb-4" />
+                    <p className="text-gray-600 mb-4 text-lg">Camera not available</p>
+                    <button
+                      type="button"
+                      onClick={requestCameraPermission}
+                      className="btn-primary"
+                    >
+                      Request Camera Access
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Processing indicator */}
+              {isProcessing && (
+                <div className="text-center py-6">
+                  <div className="animate-spin rounded-full h-16 w-16 border-b-4 border-green-600 mx-auto mb-4" />
+                  <p className="text-gray-600 text-lg font-semibold">Processing face image...</p>
+                  <p className="text-sm text-gray-500 mt-2">Please wait</p>
+                </div>
+              )}
+
+              {/* Manual capture button (fallback) */}
+              {!isProcessing && !cameraError && faceModelsLoaded && (
+                <div className="space-y-3">
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      if (webcamRef.current && currentAction) {
+                        setIsProcessing(true)
+                        setError(null)
+                        try {
+                          const imageSrc = webcamRef.current.getScreenshot()
+                          if (imageSrc) {
+                            setFaceImages(prev => [...prev, imageSrc])
+                            setCompletedActions(prev => [...prev, currentAction!])
+                            setIsProcessing(false)
+                          }
+                        } catch (err) {
+                          setError('Failed to capture image')
+                          setIsProcessing(false)
+                        }
+                      }
+                    }}
+                    className="btn-primary w-full py-3 text-lg flex items-center justify-center gap-2"
+                  >
+                    <Camera className="w-5 h-5" />
+                    Capture Manually
+                  </button>
+                  <button
+                    type="button"
+                    onClick={closeFaceModal}
+                    className="btn-secondary w-full py-3 text-lg"
+                  >
+                    Cancel & Close
+                  </button>
+                </div>
+              )}
+
+              {/* Loading face models */}
+              {!cameraError && !faceModelsLoaded && (
+                <div className="text-center py-6">
+                  <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-green-600 mx-auto mb-2" />
+                  <p className="text-gray-600">Loading face detection...</p>
+                </div>
+              )}
+            </div>
+          ) : completedActions.length === allActions.length ? (
+            <div className="text-center py-8">
+              <CheckCircle className="w-16 h-16 text-green-500 mx-auto mb-4" />
+              <p className="text-lg font-semibold text-green-600">All Actions Completed!</p>
+              <p className="text-sm text-gray-600 mt-2">Verifying your identity...</p>
+            </div>
+          ) : (
+            <div className="text-center py-8">
+              <Eye className="w-16 h-16 text-gray-400 mx-auto mb-4" />
+              <p className="text-gray-600">Ready to start face scan</p>
+            </div>
+          )}
+        </div>
+      </FaceScanModal>
     </div>
   )
 }
