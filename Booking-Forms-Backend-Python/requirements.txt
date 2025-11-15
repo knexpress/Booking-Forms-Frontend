@@ -1,0 +1,26 @@
+# Flask and API dependencies
+Flask
+flask-cors
+Werkzeug
+
+# Image processing
+opencv-python
+numpy
+Pillow
+
+# OCR
+easyocr
+
+# Alternative OCR (optional - uncomment if preferred)
+# paddlepaddle==2.5.2
+# paddleocr==2.7.0.3
+
+# Utilities
+python-dateutil
+
+# Development
+pytest
+pytest-cov
+black
+flake8
+
