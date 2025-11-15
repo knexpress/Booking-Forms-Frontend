@@ -25,6 +25,8 @@ export interface BookingPDFData {
   }>
   eidFrontImage?: string
   eidBackImage?: string
+  philippinesIdFront?: string
+  philippinesIdBack?: string
   customerImage?: string // Single image for backward compatibility
   customerImages?: string[] // Multiple face images
   submissionTimestamp?: string
@@ -239,6 +241,15 @@ export async function generateBookingPDF(data: BookingPDFData, options?: { openI
 
   if (data.eidBackImage) {
     await addImageToPDF(data.eidBackImage, 'Emirates ID - Back')
+  }
+
+  // Add Philippines ID images if available (for Philippines to UAE route)
+  if (data.philippinesIdFront) {
+    await addImageToPDF(data.philippinesIdFront, 'Philippines ID - Front')
+  }
+
+  if (data.philippinesIdBack) {
+    await addImageToPDF(data.philippinesIdBack, 'Philippines ID - Back')
   }
 
   // Add customer photos - prefer multiple images array, fallback to single image

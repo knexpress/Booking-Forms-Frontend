@@ -1,8 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useForm } from 'react-hook-form'
-import { ArrowLeft, ArrowRight, MapPin, Plane, ChevronDown, AlertCircle } from 'lucide-react'
+import { ArrowLeft, ArrowRight, Plane, ChevronDown, AlertCircle } from 'lucide-react'
 import { BookingFormData } from '../types'
-import { philippinesRegions, getProvincesForRegion, getCitiesForProvince, getBarangaysForCity } from '../data/philippinesLocations'
 
 interface ReceiverDetailsFormProps {
   onNext: (receiverData: Partial<BookingFormData>) => void
@@ -16,17 +15,22 @@ export default function ReceiverDetailsForm({ onNext, onBack, initialData, servi
     defaultValues: initialData || {}
   })
 
+  // Determine route
+  const route = (service || initialData?.service || 'uae-to-pinas').toLowerCase()
+  const isPhToUae = route === 'ph-to-uae'
+  const routeDisplay = isPhToUae ? 'PHILIPPINES TO UAE' : 'UAE TO PHILIPPINES'
+
   // Local state for new fields
   const [firstName, setFirstName] = useState('')
   const [lastName, setLastName] = useState('')
-  const [country, setCountry] = useState('PHILIPPINES')
+  const [country, setCountry] = useState(isPhToUae ? 'UNITED ARAB EMIRATES' : 'PHILIPPINES')
   const [region, setRegion] = useState('')
   const [province, setProvince] = useState('')
   const [city, setCity] = useState('')
   const [barangay, setBarangay] = useState('')
   const [addressLine1, setAddressLine1] = useState('')
   const [landmark, setLandmark] = useState('')
-  const [dialCode, setDialCode] = useState('+63')
+  const [dialCode, setDialCode] = useState(isPhToUae ? '+971' : '+63')
   const [phoneNumber, setPhoneNumber] = useState('')
   const [emailAddress, setEmailAddress] = useState('')
   const [receiverDeliveryOption, setReceiverDeliveryOption] = useState<'pickup' | 'delivery'>('delivery')
@@ -35,16 +39,6 @@ export default function ReceiverDetailsForm({ onNext, onBack, initialData, servi
   const [touched, setTouched] = useState<Record<string, boolean>>({})
   const [validationErrors, setValidationErrors] = useState<Record<string, string>>({})
 
-  // Determine route
-  const route = (service || initialData?.service || 'uae-to-pinas').toLowerCase()
-  const isPhToUae = route === 'ph-to-uae'
-  const routeDisplay = isPhToUae ? 'PHILIPPINES TO UAE' : 'UAE TO PHILIPPINES'
-
-  // Get available options based on selections
-  const availableProvinces = region ? getProvincesForRegion(region) : []
-  const availableCities = (region && province) ? getCitiesForProvince(region, province) : []
-  const availableBarangays = (region && province && city) ? getBarangaysForCity(region, province, city) : []
-
   // Validate field
   const validateField = (name: string, value: string) => {
     if (!value || value.trim() === '') {
@@ -52,13 +46,17 @@ export default function ReceiverDetailsForm({ onNext, onBack, initialData, servi
       return false
     }
     
-    // Email validation
+    // Email validation (only if value is provided - field is optional)
     if (name === 'emailAddress') {
-      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
-      if (!emailRegex.test(value.trim())) {
-        setValidationErrors(prev => ({ ...prev, [name]: 'Please enter a valid email address' }))
-        return false
+      if (value && value.trim() !== '') {
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+        if (!emailRegex.test(value.trim())) {
+          setValidationErrors(prev => ({ ...prev, [name]: 'Please enter a valid email address' }))
+          return false
+        }
       }
+      // Email is optional, so if empty, it's valid
+      return true
     }
     
     // Phone number validation
@@ -96,6 +94,23 @@ export default function ReceiverDetailsForm({ onNext, onBack, initialData, servi
       }
     }
     
+    // Last name validation
+    if (name === 'lastName') {
+      const nameValue = value.trim()
+      if (nameValue.length < 2) {
+        setValidationErrors(prev => ({ ...prev, [name]: 'Last name must be at least 2 characters' }))
+        return false
+      }
+      if (nameValue.length > 50) {
+        setValidationErrors(prev => ({ ...prev, [name]: 'Last name must be less than 50 characters' }))
+        return false
+      }
+      if (!/^[a-zA-Z\s]+$/.test(nameValue)) {
+        setValidationErrors(prev => ({ ...prev, [name]: 'Last name can only contain letters and spaces' }))
+        return false
+      }
+    }
+    
     setValidationErrors(prev => {
       const newErrors = { ...prev }
       delete newErrors[name]
@@ -109,6 +124,17 @@ export default function ReceiverDetailsForm({ onNext, onBack, initialData, servi
     setTouched(prev => ({ ...prev, [name]: true }))
     validateField(name, value)
   }
+
+  // Update country when route changes
+  useEffect(() => {
+    setCountry(isPhToUae ? 'UNITED ARAB EMIRATES' : 'PHILIPPINES')
+    // Also update dial code based on route
+    if (isPhToUae) {
+      setDialCode('+971')
+    } else {
+      setDialCode('+63')
+    }
+  }, [isPhToUae])
 
   useEffect(() => {
     if (initialData?.receiver) {
@@ -139,19 +165,21 @@ export default function ReceiverDetailsForm({ onNext, onBack, initialData, servi
       if (initialData.receiver.deliveryOption) {
         setReceiverDeliveryOption(initialData.receiver.deliveryOption)
       }
+      // Set country from initialData if it exists, otherwise use route-based default
+      if (initialData.receiver.country) {
+        setCountry(initialData.receiver.country)
+      } else {
+        setCountry(isPhToUae ? 'UNITED ARAB EMIRATES' : 'PHILIPPINES')
+      }
     }
-  }, [initialData])
+  }, [initialData, isPhToUae])
 
   const onSubmit = (data: BookingFormData) => {
     // Validate all required fields
     const fieldValidations = [
       { name: 'firstName', value: firstName },
-      { name: 'region', value: region },
-      { name: 'province', value: province },
-      { name: 'city', value: city },
-      { name: 'barangay', value: barangay },
-      { name: 'phoneNumber', value: phoneNumber },
-      { name: 'emailAddress', value: emailAddress }
+      { name: 'lastName', value: lastName },
+      { name: 'phoneNumber', value: phoneNumber }
     ]
 
     let isValid = true
@@ -161,6 +189,14 @@ export default function ReceiverDetailsForm({ onNext, onBack, initialData, servi
         isValid = false
       }
     })
+    
+    // Validate email if provided (optional field)
+    if (emailAddress && emailAddress.trim() !== '') {
+      setTouched(prev => ({ ...prev, emailAddress: true }))
+      if (!validateField('emailAddress', emailAddress)) {
+        isValid = false
+      }
+    }
 
     if (!isValid) {
       return
@@ -169,15 +205,8 @@ export default function ReceiverDetailsForm({ onNext, onBack, initialData, servi
     // Combine firstName and lastName
     const fullName = `${firstName} ${lastName}`.trim()
     
-    // Build complete address
-    const addressParts = []
-    if (addressLine1) addressParts.push(addressLine1)
-    if (landmark) addressParts.push(`Landmark: ${landmark}`)
-    if (barangay) addressParts.push(barangay)
-    if (city) addressParts.push(city)
-    if (province) addressParts.push(province)
-    if (region) addressParts.push(region)
-    const completeAddress = addressParts.join(', ')
+    // Build complete address (just use addressLine1)
+    const completeAddress = addressLine1 || ''
 
     // Combine dialCode and phoneNumber
     const contactNo = `${dialCode}${phoneNumber}`
@@ -189,7 +218,7 @@ export default function ReceiverDetailsForm({ onNext, onBack, initialData, servi
         firstName,
         lastName,
         completeAddress,
-        country: country || 'PHILIPPINES',
+        country: country || (isPhToUae ? 'UNITED ARAB EMIRATES' : 'PHILIPPINES'),
         region,
         province,
         city,
@@ -210,32 +239,33 @@ export default function ReceiverDetailsForm({ onNext, onBack, initialData, servi
   return (
     <div className="space-y-6">
       {/* Sub-Header with Route Badge */}
-      <div className="bg-white border-b border-gray-200">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-          <div className="flex items-center justify-between">
+      <div className="bg-white border-b border-gray-200 sticky top-0 z-10">
+        <div className="max-w-7xl mx-auto px-3 sm:px-4 lg:px-8 py-3 sm:py-4">
+          <div className="flex items-center justify-between gap-2">
             <button
               onClick={onBack}
-              className="flex items-center gap-2 text-gray-700 hover:text-gray-900 transition-colors"
+              className="flex items-center gap-1 sm:gap-2 text-gray-700 hover:text-gray-900 transition-colors min-h-[44px] px-2 sm:px-0"
+              aria-label="Go back"
             >
-              <ArrowLeft className="w-5 h-5" />
-              <span>Back</span>
+              <ArrowLeft className="w-5 h-5 flex-shrink-0" />
+              <span className="hidden sm:inline">Back</span>
             </button>
-            <div className="flex-1 flex justify-center">
-              <div className="flex items-center gap-2 bg-green-600 text-white px-4 py-2 rounded-full">
-                <span className="text-sm font-semibold">{routeDisplay}</span>
-                <Plane className="w-4 h-4" />
+            <div className="flex-1 flex justify-center min-w-0">
+              <div className="flex items-center gap-1.5 sm:gap-2 bg-green-600 text-white px-2 sm:px-4 py-1.5 sm:py-2 rounded-full">
+                <span className="text-xs sm:text-sm font-semibold truncate">{routeDisplay}</span>
+                <Plane className="w-3.5 h-3.5 sm:w-4 sm:h-4 flex-shrink-0" />
               </div>
             </div>
-            <div className="text-sm text-gray-600 font-medium">
-              Step 4 of 7: Receiver Details
+            <div className="text-xs sm:text-sm text-gray-600 font-medium hidden xs:block whitespace-nowrap">
+              Step 3 of 6
             </div>
           </div>
         </div>
       </div>
 
       {/* Main Form Content */}
-      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 pb-8">
-        <form onSubmit={handleSubmit(onSubmit)} className="bg-white rounded-lg shadow-lg p-4 sm:p-6 lg:p-8 space-y-6 sm:space-y-8">
+      <div className="max-w-4xl mx-auto px-3 sm:px-4 lg:px-8 pb-6 sm:pb-8">
+        <form onSubmit={handleSubmit(onSubmit)} className="bg-white rounded-lg shadow-lg p-4 sm:p-6 lg:p-8 space-y-5 sm:space-y-6 lg:space-y-8">
           {/* Title Section */}
           <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
             <div>
@@ -246,9 +276,9 @@ export default function ReceiverDetailsForm({ onNext, onBack, initialData, servi
           </div>
 
           {/* Personal Information */}
-          <div className="space-y-4">
-            <h2 className="text-lg font-semibold text-gray-800">Personal Information</h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="space-y-3 sm:space-y-4">
+            <h2 className="text-base sm:text-lg font-semibold text-gray-800">Personal Information</h2>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   First Name <span className="text-red-500">*</span>
@@ -265,7 +295,7 @@ export default function ReceiverDetailsForm({ onNext, onBack, initialData, servi
                     }
                   }}
                   onBlur={() => handleBlur('firstName', firstName)}
-                  className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:border-transparent transition-all text-base ${
+                  className={`w-full px-3 sm:px-4 py-2.5 sm:py-3 border rounded-lg focus:ring-2 focus:border-transparent transition-all text-base min-h-[44px] ${
                     touched.firstName && validationErrors.firstName
                       ? 'border-red-500 focus:ring-red-500'
                       : 'border-gray-300 focus:ring-green-500'
@@ -284,7 +314,7 @@ export default function ReceiverDetailsForm({ onNext, onBack, initialData, servi
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Last Name
+                  Last Name <span className="text-red-500">*</span>
                 </label>
                 <input
                   type="text"
@@ -293,19 +323,34 @@ export default function ReceiverDetailsForm({ onNext, onBack, initialData, servi
                     // Only allow letters and spaces
                     const value = e.target.value.replace(/[^a-zA-Z\s]/g, '')
                     setLastName(value)
+                    if (touched.lastName) {
+                      validateField('lastName', value)
+                    }
                   }}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all text-base"
-                  placeholder="Enter receiver's last name (optional)"
+                  onBlur={() => handleBlur('lastName', lastName)}
+                  className={`w-full px-3 sm:px-4 py-2.5 sm:py-3 border rounded-lg focus:ring-2 focus:border-transparent transition-all text-base min-h-[44px] ${
+                    touched.lastName && validationErrors.lastName
+                      ? 'border-red-500 focus:ring-red-500'
+                      : 'border-gray-300 focus:ring-green-500'
+                  }`}
+                  placeholder="Enter receiver's last name"
+                  required
                   maxLength={50}
                 />
-                <p className="mt-1 text-xs text-gray-500">Optional: Letters only</p>
+                <p className="mt-1 text-xs text-gray-500">Format: Letters only, 2-50 characters</p>
+                {touched.lastName && validationErrors.lastName && (
+                  <div className="flex items-center gap-1 mt-1 text-red-500 text-sm">
+                    <AlertCircle className="w-4 h-4" />
+                    <span>{validationErrors.lastName}</span>
+                  </div>
+                )}
               </div>
             </div>
           </div>
 
           {/* Address Information */}
-          <div className="space-y-4">
-            <h2 className="text-lg font-semibold text-gray-800">Address Information</h2>
+          <div className="space-y-3 sm:space-y-4">
+            <h2 className="text-base sm:text-lg font-semibold text-gray-800">Address Information</h2>
             
             {/* Country */}
             <div>
@@ -313,177 +358,20 @@ export default function ReceiverDetailsForm({ onNext, onBack, initialData, servi
                 Country <span className="text-red-500">*</span>
               </label>
               <div className="relative">
-                <div className="absolute left-3 top-1/2 transform -translate-y-1/2 w-6 h-4 bg-red-600 rounded z-10"></div>
+                <div className={`absolute left-3 top-1/2 transform -translate-y-1/2 w-6 h-4 rounded z-10 ${
+                  isPhToUae ? 'bg-gradient-to-r from-red-500 via-green-500 to-black' : 'bg-red-600'
+                }`}></div>
                 <select
                   value={country}
                   onChange={(e) => setCountry(e.target.value)}
-                  className="w-full pl-12 pr-10 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent appearance-none bg-white text-gray-700"
+                  className="w-full pl-10 sm:pl-12 pr-8 sm:pr-10 py-2.5 sm:py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent appearance-none bg-white text-gray-700 text-base min-h-[44px]"
                   required
                 >
-                  <option value="PHILIPPINES">PHILIPPINES</option>
+                  <option value={isPhToUae ? 'UNITED ARAB EMIRATES' : 'PHILIPPINES'}>
+                    {isPhToUae ? 'UNITED ARAB EMIRATES' : 'PHILIPPINES'}
+                  </option>
                 </select>
                 <ChevronDown className="absolute right-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400 pointer-events-none z-10" />
-              </div>
-            </div>
-
-            {/* Region, Province, City, Barangay */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Region <span className="text-red-500">*</span>
-                </label>
-                <div className="relative">
-                  <MapPin className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400 z-10" />
-                  <select
-                    value={region}
-                    onChange={(e) => {
-                      setRegion(e.target.value)
-                      setProvince('')
-                      setCity('')
-                      setBarangay('')
-                      if (touched.region) {
-                        validateField('region', e.target.value)
-                      }
-                    }}
-                    onBlur={() => handleBlur('region', region)}
-                    className={`w-full pl-10 pr-10 py-3 border rounded-lg focus:ring-2 focus:border-transparent appearance-none bg-white text-gray-700 text-base ${
-                      touched.region && validationErrors.region
-                        ? 'border-red-500 focus:ring-red-500'
-                        : 'border-gray-300 focus:ring-green-500'
-                    }`}
-                    required
-                  >
-                    <option value="">Select Region</option>
-                    {philippinesRegions.map((r) => (
-                      <option key={r} value={r}>{r}</option>
-                    ))}
-                  </select>
-                  <ChevronDown className="absolute right-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400 pointer-events-none z-10" />
-                </div>
-                <p className="mt-1 text-xs text-gray-500">Required: Select your region</p>
-                {touched.region && validationErrors.region && (
-                  <div className="flex items-center gap-1 mt-1 text-red-500 text-sm">
-                    <AlertCircle className="w-4 h-4" />
-                    <span>{validationErrors.region}</span>
-                  </div>
-                )}
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Province <span className="text-red-500">*</span>
-                </label>
-                <div className="relative">
-                  <MapPin className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400 z-10" />
-                  <select
-                    value={province}
-                    onChange={(e) => {
-                      setProvince(e.target.value)
-                      setCity('')
-                      setBarangay('')
-                      if (touched.province) {
-                        validateField('province', e.target.value)
-                      }
-                    }}
-                    onBlur={() => handleBlur('province', province)}
-                    className={`w-full pl-10 pr-10 py-3 border rounded-lg focus:ring-2 focus:border-transparent appearance-none bg-white text-gray-700 text-base ${
-                      touched.province && validationErrors.province
-                        ? 'border-red-500 focus:ring-red-500'
-                        : 'border-gray-300 focus:ring-green-500'
-                    }`}
-                    disabled={!region}
-                    required
-                  >
-                    <option value="">Select Province</option>
-                    {availableProvinces.map((p) => (
-                      <option key={p} value={p}>{p}</option>
-                    ))}
-                  </select>
-                  <ChevronDown className="absolute right-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400 pointer-events-none z-10" />
-                </div>
-                <p className="mt-1 text-xs text-gray-500">Required: Select your province</p>
-                {touched.province && validationErrors.province && (
-                  <div className="flex items-center gap-1 mt-1 text-red-500 text-sm">
-                    <AlertCircle className="w-4 h-4" />
-                    <span>{validationErrors.province}</span>
-                  </div>
-                )}
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  City / Municipality <span className="text-red-500">*</span>
-                </label>
-                <div className="relative">
-                  <MapPin className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400 z-10" />
-                  <select
-                    value={city}
-                    onChange={(e) => {
-                      setCity(e.target.value)
-                      setBarangay('')
-                      if (touched.city) {
-                        validateField('city', e.target.value)
-                      }
-                    }}
-                    onBlur={() => handleBlur('city', city)}
-                    className={`w-full pl-10 pr-10 py-3 border rounded-lg focus:ring-2 focus:border-transparent appearance-none bg-white text-gray-700 text-base ${
-                      touched.city && validationErrors.city
-                        ? 'border-red-500 focus:ring-red-500'
-                        : 'border-gray-300 focus:ring-green-500'
-                    }`}
-                    disabled={!province}
-                    required
-                  >
-                    <option value="">Select City</option>
-                    {availableCities.map((c) => (
-                      <option key={c} value={c}>{c}</option>
-                    ))}
-                  </select>
-                  <ChevronDown className="absolute right-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400 pointer-events-none z-10" />
-                </div>
-                <p className="mt-1 text-xs text-gray-500">Required: Select your city/municipality</p>
-                {touched.city && validationErrors.city && (
-                  <div className="flex items-center gap-1 mt-1 text-red-500 text-sm">
-                    <AlertCircle className="w-4 h-4" />
-                    <span>{validationErrors.city}</span>
-                  </div>
-                )}
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Barangay <span className="text-red-500">*</span>
-                </label>
-                <div className="relative">
-                  <MapPin className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400 z-10" />
-                  <select
-                    value={barangay}
-                    onChange={(e) => {
-                      setBarangay(e.target.value)
-                      if (touched.barangay) {
-                        validateField('barangay', e.target.value)
-                      }
-                    }}
-                    onBlur={() => handleBlur('barangay', barangay)}
-                    className={`w-full pl-10 pr-10 py-3 border rounded-lg focus:ring-2 focus:border-transparent appearance-none bg-white text-gray-700 text-base ${
-                      touched.barangay && validationErrors.barangay
-                        ? 'border-red-500 focus:ring-red-500'
-                        : 'border-gray-300 focus:ring-green-500'
-                    }`}
-                    disabled={!city}
-                    required
-                  >
-                    <option value="">Select Barangay</option>
-                    {availableBarangays.map((b) => (
-                      <option key={b} value={b}>{b}</option>
-                    ))}
-                  </select>
-                  <ChevronDown className="absolute right-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400 pointer-events-none z-10" />
-                </div>
-                <p className="mt-1 text-xs text-gray-500">Required: Select your barangay</p>
-                {touched.barangay && validationErrors.barangay && (
-                  <div className="flex items-center gap-1 mt-1 text-red-500 text-sm">
-                    <AlertCircle className="w-4 h-4" />
-                    <span>{validationErrors.barangay}</span>
-                  </div>
-                )}
               </div>
             </div>
 
@@ -496,27 +384,11 @@ export default function ReceiverDetailsForm({ onNext, onBack, initialData, servi
                 type="text"
                 value={addressLine1}
                 onChange={(e) => setAddressLine1(e.target.value)}
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all text-base"
-                placeholder="House No., Street, Subdivision / Village"
+                className="w-full px-3 sm:px-4 py-2.5 sm:py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all text-base min-h-[44px]"
+                placeholder="Flat/Villa No., Building, Street & Area"
                 maxLength={200}
               />
               <p className="mt-1 text-xs text-gray-500">Optional: Detailed address information (max 200 characters)</p>
-            </div>
-
-            {/* Landmark */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Landmark
-              </label>
-              <input
-                type="text"
-                value={landmark}
-                onChange={(e) => setLandmark(e.target.value)}
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all text-base"
-                placeholder="Nearby landmark or reference point"
-                maxLength={100}
-              />
-              <p className="mt-1 text-xs text-gray-500">Optional: Nearby landmarks for easier location (max 100 characters)</p>
             </div>
           </div>
 
@@ -557,26 +429,30 @@ export default function ReceiverDetailsForm({ onNext, onBack, initialData, servi
           </div>
 
           {/* Contact Information */}
-          <div className="space-y-4">
-            <h2 className="text-lg font-semibold text-gray-800">Contact Information</h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="space-y-3 sm:space-y-4">
+            <h2 className="text-base sm:text-lg font-semibold text-gray-800">Contact Information</h2>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Dial Code <span className="text-red-500">*</span>
                 </label>
                 <div className="relative">
-                  <div className="absolute left-3 top-1/2 transform -translate-y-1/2 w-6 h-4 bg-red-600 rounded z-10"></div>
+                  <div className={`absolute left-3 top-1/2 transform -translate-y-1/2 w-6 h-4 rounded z-10 ${
+                    !isPhToUae ? 'bg-red-600' : 'bg-gradient-to-r from-red-500 via-green-500 to-black'
+                  }`}></div>
                   <select
                     value={dialCode}
                     onChange={(e) => setDialCode(e.target.value)}
-                    className="w-full pl-12 pr-10 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent appearance-none bg-white text-gray-700"
+                    disabled={true}
+                    className="w-full pl-10 sm:pl-12 pr-8 sm:pr-10 py-2.5 sm:py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent appearance-none bg-white text-gray-700 bg-gray-100 cursor-not-allowed text-base min-h-[44px]"
                     required
                   >
                     <option value="+63">+63</option>
                     <option value="+971">+971</option>
                   </select>
-                  <ChevronDown className="absolute right-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400 pointer-events-none z-10" />
+                  <ChevronDown className="absolute right-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-300 pointer-events-none z-10" />
                 </div>
+                <p className="mt-1 text-xs text-gray-500">Dial code is fixed based on receiver country</p>
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -594,7 +470,7 @@ export default function ReceiverDetailsForm({ onNext, onBack, initialData, servi
                     }
                   }}
                   onBlur={() => handleBlur('phoneNumber', phoneNumber)}
-                  className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:border-transparent transition-all text-base ${
+                  className={`w-full px-3 sm:px-4 py-2.5 sm:py-3 border rounded-lg focus:ring-2 focus:border-transparent transition-all text-base min-h-[44px] ${
                     touched.phoneNumber && validationErrors.phoneNumber
                       ? 'border-red-500 focus:ring-red-500'
                       : 'border-gray-300 focus:ring-green-500'
@@ -616,7 +492,7 @@ export default function ReceiverDetailsForm({ onNext, onBack, initialData, servi
             {/* Email Address */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
-                Email Address <span className="text-red-500">*</span>
+                Email Address
               </label>
               <input
                 type="email"
@@ -628,15 +504,14 @@ export default function ReceiverDetailsForm({ onNext, onBack, initialData, servi
                   }
                 }}
                 onBlur={() => handleBlur('emailAddress', emailAddress)}
-                className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:border-transparent transition-all text-base ${
+                className={`w-full px-3 sm:px-4 py-2.5 sm:py-3 border rounded-lg focus:ring-2 focus:border-transparent transition-all text-base min-h-[44px] ${
                   touched.emailAddress && validationErrors.emailAddress
                     ? 'border-red-500 focus:ring-red-500'
                     : 'border-gray-300 focus:ring-green-500'
                 }`}
-                placeholder="receiver.email@example.com"
-                required
+                placeholder="receiver.email@example.com (optional)"
               />
-              <p className="mt-1 text-xs text-gray-500">Format: valid email address (e.g., name@domain.com)</p>
+              <p className="mt-1 text-xs text-gray-500">Optional: Valid email address (e.g., name@domain.com)</p>
               {touched.emailAddress && validationErrors.emailAddress && (
                 <div className="flex items-center gap-1 mt-1 text-red-500 text-sm">
                   <AlertCircle className="w-4 h-4" />
@@ -647,13 +522,13 @@ export default function ReceiverDetailsForm({ onNext, onBack, initialData, servi
           </div>
 
           {/* Next Step Button */}
-          <div className="flex flex-col sm:flex-row justify-end gap-3 pt-4">
+          <div className="flex flex-col sm:flex-row justify-end gap-3 pt-4 sm:pt-6">
             <button
               type="submit"
-              className="flex items-center justify-center gap-2 bg-green-700 text-white px-6 sm:px-8 py-3 rounded-lg font-semibold hover:bg-green-800 transition-colors text-base sm:text-lg w-full sm:w-auto"
+              className="flex items-center justify-center gap-2 bg-green-700 text-white px-6 sm:px-8 py-3 sm:py-3.5 rounded-lg font-semibold hover:bg-green-800 active:bg-green-900 transition-colors text-base sm:text-lg w-full sm:w-auto min-h-[48px] shadow-md hover:shadow-lg"
             >
               <span>Next Step</span>
-              <ArrowRight className="w-5 h-5" />
+              <ArrowRight className="w-5 h-5 flex-shrink-0" />
             </button>
           </div>
         </form>

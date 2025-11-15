@@ -60,6 +60,8 @@ export interface BookingFormData {
 export interface VerificationData {
   eidFrontImage?: string;
   eidBackImage?: string;
+  philippinesIdFront?: string;
+  philippinesIdBack?: string;
   faceImage?: string; // Keep for backward compatibility (will use first image)
   faceImages?: string[]; // Array to store multiple face images
   eidVerified: boolean;

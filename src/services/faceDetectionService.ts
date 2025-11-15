@@ -150,28 +150,103 @@ export async function detectFaceInFrame(
     }
   }
 
+  // Validate video element has valid dimensions
+  if (!videoElement) {
+    return {
+      detected: false,
+    }
+  }
+
+  // Check video ready state and dimensions
+  const videoWidth = videoElement.videoWidth || videoElement.clientWidth || 0
+  const videoHeight = videoElement.videoHeight || videoElement.clientHeight || 0
+
+  // Ensure video has valid dimensions before processing
+  if (videoWidth === 0 || videoHeight === 0) {
+    // Video not ready yet, return no detection
+    return {
+      detected: false,
+    }
+  }
+
+  // Check video readyState - should be at least HAVE_CURRENT_DATA (2) or HAVE_FUTURE_DATA (3)
+  if (videoElement.readyState < 2) {
+    // Video metadata not loaded yet
+    return {
+      detected: false,
+    }
+  }
+
   try {
+    // Validate video element is still valid before detection
+    if (!videoElement || videoElement.readyState === 0 || videoWidth === 0 || videoHeight === 0) {
+      return {
+        detected: false,
+      }
+    }
+
     // Use tinyFaceDetector for better performance
-    const detection = await faceapi
+    // Add timeout to prevent hanging on invalid video elements
+    const detectionPromise = faceapi
       .detectSingleFace(videoElement, new faceapi.TinyFaceDetectorOptions())
       .withFaceLandmarks()
       .withFaceExpressions()
       .withFaceDescriptor()
 
-    if (!detection) {
+    // Add timeout to prevent hanging (5 seconds)
+    const timeoutPromise = new Promise((_, reject) => 
+      setTimeout(() => reject(new Error('Face detection timeout')), 5000)
+    )
+
+    const detection = await Promise.race([detectionPromise, timeoutPromise]) as any
+
+    if (!detection || !detection.detection || !detection.landmarks) {
       return {
         detected: false,
       }
     }
 
     const box = detection.detection.box
+    
+    // Validate box dimensions
+    if (!box || box.width <= 0 || box.height <= 0) {
+      return {
+        detected: false,
+      }
+    }
+
     const landmarks = detection.landmarks
 
-    // Extract key landmarks
-    const leftEye = landmarks.getLeftEye()
-    const rightEye = landmarks.getRightEye()
-    const nose = landmarks.getNose()
-    const mouth = landmarks.getMouth()
+    // Extract key landmarks with validation
+    if (!landmarks || typeof landmarks.getLeftEye !== 'function') {
+      return {
+        detected: false,
+      }
+    }
+
+    let leftEye, rightEye, nose, mouth
+
+    try {
+      leftEye = landmarks.getLeftEye()
+      rightEye = landmarks.getRightEye()
+      nose = landmarks.getNose()
+      mouth = landmarks.getMouth()
+
+      // Validate landmarks exist and have valid data
+      if (!leftEye || !rightEye || !nose || !mouth || 
+          leftEye.length === 0 || rightEye.length === 0 || 
+          nose.length === 0 || mouth.length === 0 ||
+          !leftEye[0] || !rightEye[0] || !nose[0] || !mouth[0]) {
+        return {
+          detected: false,
+        }
+      }
+    } catch (landmarkError) {
+      // Landmarks extraction failed
+      return {
+        detected: false,
+      }
+    }
 
     // Calculate face angle (simplified)
     const eyeDistance = Math.sqrt(
@@ -218,7 +293,14 @@ export async function detectFaceInFrame(
       confidence: detection.detection.score,
     }
   } catch (error) {
-    console.error('Face detection error:', error)
+    // Silently handle errors to prevent console spam
+    // Common errors: video not ready, invalid dimensions, etc.
+    if (error instanceof Error) {
+      // Only log non-timeout errors to avoid spam
+      if (!error.message.includes('timeout') && !error.message.includes('InvalidStateError')) {
+        console.warn('Face detection warning:', error.message)
+      }
+    }
     return {
       detected: false,
     }

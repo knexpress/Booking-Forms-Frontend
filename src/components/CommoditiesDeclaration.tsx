@@ -104,38 +104,39 @@ export default function CommoditiesDeclaration({ onNext, onBack, initialData, se
   return (
     <div className="space-y-6">
       {/* Sub-Header with Route Badge */}
-      <div className="bg-white border-b border-gray-200">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-          <div className="flex items-center justify-between">
+      <div className="bg-white border-b border-gray-200 sticky top-0 z-10">
+        <div className="max-w-7xl mx-auto px-3 sm:px-4 lg:px-8 py-3 sm:py-4">
+          <div className="flex items-center justify-between gap-2">
             <button
               onClick={onBack}
-              className="flex items-center gap-2 text-gray-700 hover:text-gray-900 transition-colors"
+              className="flex items-center gap-1 sm:gap-2 text-gray-700 hover:text-gray-900 transition-colors min-h-[44px] px-2 sm:px-0"
+              aria-label="Go back"
             >
-              <ArrowLeft className="w-5 h-5" />
-              <span>Back</span>
+              <ArrowLeft className="w-5 h-5 flex-shrink-0" />
+              <span className="hidden sm:inline">Back</span>
             </button>
-            <div className="flex-1 flex justify-center">
-              <div className="flex items-center gap-2 bg-green-600 text-white px-4 py-2 rounded-full">
-                <span className="text-sm font-semibold">{routeDisplay}</span>
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <div className="flex-1 flex justify-center min-w-0">
+              <div className="flex items-center gap-1.5 sm:gap-2 bg-green-600 text-white px-2 sm:px-4 py-1.5 sm:py-2 rounded-full">
+                <span className="text-xs sm:text-sm font-semibold truncate">{routeDisplay}</span>
+                <svg className="w-3.5 h-3.5 sm:w-4 sm:h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
                 </svg>
               </div>
             </div>
-            <div className="text-sm text-gray-600 font-medium">
-              Step 5 of 7: Commodities Declaration
+            <div className="text-xs sm:text-sm text-gray-600 font-medium hidden xs:block whitespace-nowrap">
+              Step 4 of 6
             </div>
           </div>
         </div>
       </div>
 
       {/* Main Form Content */}
-      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 pb-8">
-        <div className="bg-white rounded-lg shadow-lg p-4 sm:p-6 lg:p-8 space-y-6 sm:space-y-8">
+      <div className="max-w-4xl mx-auto px-3 sm:px-4 lg:px-8 pb-6 sm:pb-8">
+        <div className="bg-white rounded-lg shadow-lg p-4 sm:p-6 lg:p-8 space-y-5 sm:space-y-6 lg:space-y-8">
           {/* Title Section */}
           <div className="text-center">
-            <h1 className="text-2xl sm:text-3xl font-bold text-green-600 mb-2">Commodities Declaration</h1>
-            <p className="text-sm sm:text-base text-gray-600">Confirm the items of your shipment.</p>
+            <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold text-green-600 mb-2">Commodities Declaration</h1>
+            <p className="text-xs sm:text-sm lg:text-base text-gray-600">Confirm the items of your shipment.</p>
           </div>
 
           {/* Information Alert */}
@@ -173,25 +174,34 @@ export default function CommoditiesDeclaration({ onNext, onBack, initialData, se
             </div>
           </div>
 
-          {/* Restricted Items */}
+          {/* Banned Items */}
           <div className="bg-red-50 border-2 border-red-500 rounded-lg p-4 sm:p-6">
-            <h3 className="text-base sm:text-lg font-bold text-red-800 mb-3 sm:mb-4">RESTRICTED ITEMS</h3>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-3">
+            <h3 className="text-base sm:text-lg font-bold text-red-800 mb-2 sm:mb-3">BANNED ITEMS</h3>
+            <p className="text-xs sm:text-sm text-red-900 font-semibold mb-3 sm:mb-4">
+              Please be reminded that the following items are STRICTLY PROHIBITED from shipment:
+            </p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-3 mb-3 sm:mb-4">
               <div className="space-y-1 sm:space-y-2">
-                <div className="text-xs sm:text-sm text-red-900">• Any food with Pork Content</div>
-                <div className="text-xs sm:text-sm text-red-900">• Weapons</div>
-                <div className="text-xs sm:text-sm text-red-900">• Money</div>
-                <div className="text-xs sm:text-sm text-red-900">• Car Batteries</div>
-                <div className="text-xs sm:text-sm text-red-900">• Machine Batteries</div>
+                <div className="text-xs sm:text-sm text-red-900">* Flammable / Explosive Items</div>
+                <div className="text-xs sm:text-sm text-red-900">* Deadly Weapons</div>
+                <div className="text-xs sm:text-sm text-red-900">* Illegal Drugs / Vape / Cigarettes / Alcoholic Drinks</div>
+                <div className="text-xs sm:text-sm text-red-900">* Expensive / Original Jewelries (gold or silver)</div>
+                <div className="text-xs sm:text-sm text-red-900">* Money / Cash</div>
+                <div className="text-xs sm:text-sm text-red-900">* Live Animals</div>
+                <div className="text-xs sm:text-sm text-red-900">* Frozen Goods / Any Pork Items</div>
               </div>
               <div className="space-y-1 sm:space-y-2">
-                <div className="text-xs sm:text-sm text-red-900">• Large Batteries</div>
-                <div className="text-xs sm:text-sm text-red-900">• Jewelry</div>
-                <div className="text-xs sm:text-sm text-red-900">• Illegal Items</div>
-                <div className="text-xs sm:text-sm text-red-900">• Cigarette</div>
-                <div className="text-xs sm:text-sm text-red-900">• Items longer than 200cm</div>
+                <div className="text-xs sm:text-sm text-red-900">* Medicines / Supplements / Capsules / Vitamins / Injectables</div>
+                <div className="text-xs sm:text-sm text-red-900">* Adult Toys</div>
+                <div className="text-xs sm:text-sm text-red-900">* Religious Items</div>
+                <div className="text-xs sm:text-sm text-red-900">* Long items (more than 200 cm are not allowed)</div>
+                <div className="text-xs sm:text-sm text-red-900">* Contact lens / Eye drops / Eye solution</div>
+                <div className="text-xs sm:text-sm text-red-900">* Perishable Goods (spoils easily)</div>
               </div>
             </div>
+            <p className="text-xs sm:text-sm text-red-900 font-bold">
+              Anything Illegal is STRICTLY BANNED.
+            </p>
           </div>
 
           {/* Registered Commodities Section */}
@@ -206,29 +216,29 @@ export default function CommoditiesDeclaration({ onNext, onBack, initialData, se
             )}
             
             {/* Table Header */}
-            <div className="bg-green-700 text-white rounded-t-lg p-3 sm:p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-0">
-              <div className="flex items-center gap-2">
-                <Package className="w-4 h-4 sm:w-5 sm:h-5" />
-                <span className="font-semibold text-sm sm:text-base">Item Name <span className="text-red-300">*</span></span>
+            <div className="bg-green-700 text-white rounded-t-lg p-3 sm:p-4 flex flex-row items-center justify-between gap-2 sm:gap-3 lg:gap-4">
+              <div className="flex items-center gap-2 flex-1 min-w-0">
+                <Package className="w-4 h-4 sm:w-5 sm:h-5 flex-shrink-0" />
+                <span className="font-semibold text-xs sm:text-sm lg:text-base">Item Name <span className="text-red-300">*</span></span>
               </div>
-              <div className="flex items-center gap-2">
-                <Grid3x3 className="w-4 h-4 sm:w-5 sm:h-5" />
-                <span className="font-semibold text-sm sm:text-base">Quantity <span className="text-red-300">*</span></span>
+              <div className="flex items-center gap-2 w-20 sm:w-24 md:w-32 flex-shrink-0 justify-center">
+                <Grid3x3 className="w-4 h-4 sm:w-5 sm:h-5 flex-shrink-0" />
+                <span className="font-semibold text-xs sm:text-sm lg:text-base">Quantity <span className="text-red-300">*</span></span>
               </div>
             </div>
 
             {/* Item Rows */}
             <div className="space-y-3 border-x border-b border-gray-200 rounded-b-lg p-3 sm:p-4">
               {items.map((item, index) => (
-                <div key={item.id} className="flex flex-col sm:flex-row sm:items-start gap-3 sm:gap-4">
-                  <div className="flex-1 w-full">
+                <div key={item.id} className="flex flex-row items-start gap-2 sm:gap-3 lg:gap-4">
+                  <div className="flex-1 min-w-0">
                     <input
                       id={`${item.id}-commodity`}
                       type="text"
                       value={item.commodity}
                       onChange={(e) => updateItem(item.id, 'commodity', e.target.value)}
                       onBlur={() => validateItems()}
-                      className={`w-full px-3 sm:px-4 py-2 sm:py-3 border rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all text-sm sm:text-base ${
+                      className={`w-full px-3 sm:px-4 py-2.5 sm:py-3 border rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all text-base min-h-[44px] ${
                         errors[`${item.id}-commodity`] ? 'border-red-500' : 'border-gray-300'
                       }`}
                       placeholder="Enter item name (e.g., Electronics, Clothing)"
@@ -239,7 +249,7 @@ export default function CommoditiesDeclaration({ onNext, onBack, initialData, se
                     )}
                     <p className="mt-1 text-xs text-gray-500">Required • 2-100 characters</p>
                   </div>
-                  <div className="w-full sm:w-32">
+                  <div className="w-20 sm:w-24 md:w-32 flex-shrink-0">
                     <input
                       id={`${item.id}-qty`}
                       type="number"
@@ -253,15 +263,15 @@ export default function CommoditiesDeclaration({ onNext, onBack, initialData, se
                         }
                       }}
                       onBlur={() => validateItems()}
-                      className={`w-full px-3 sm:px-4 py-2 sm:py-3 border rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all text-center text-sm sm:text-base ${
+                      className={`w-full px-3 sm:px-4 py-2.5 sm:py-3 border rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all text-center text-base min-h-[44px] ${
                         errors[`${item.id}-qty`] ? 'border-red-500' : 'border-gray-300'
                       }`}
                       placeholder="0"
                     />
                     {errors[`${item.id}-qty`] && (
-                      <p className="mt-1 text-xs text-red-600 text-center sm:text-left">{errors[`${item.id}-qty`]}</p>
+                      <p className="mt-1 text-xs text-red-600 text-center">{errors[`${item.id}-qty`]}</p>
                     )}
-                    <p className="mt-1 text-xs text-gray-500 text-center sm:text-left">Required • 1-9999</p>
+                    <p className="mt-1 text-xs text-gray-500 text-center">Required • 1-9999</p>
                   </div>
                 </div>
               ))}
@@ -291,9 +301,9 @@ export default function CommoditiesDeclaration({ onNext, onBack, initialData, se
               {items.length < 20 && (
                 <button
                   onClick={addItem}
-                  className="flex items-center justify-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors text-sm sm:text-base"
+                  className="flex items-center justify-center gap-2 px-4 sm:px-6 py-2.5 sm:py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 active:bg-green-800 transition-colors text-sm sm:text-base min-h-[44px]"
                 >
-                  <Plus className="w-4 h-4" />
+                  <Plus className="w-4 h-4 sm:w-5 sm:h-5 flex-shrink-0" />
                   <span>Add More</span>
                 </button>
               )}
@@ -308,13 +318,13 @@ export default function CommoditiesDeclaration({ onNext, onBack, initialData, se
           </div>
 
           {/* Next Step Button */}
-          <div className="flex justify-end pt-3 sm:pt-4">
+          <div className="flex justify-end pt-4 sm:pt-6">
             <button
               onClick={handleNext}
-              className="flex items-center justify-center gap-2 bg-green-700 text-white px-6 sm:px-8 py-2 sm:py-3 rounded-lg font-semibold hover:bg-green-800 transition-colors w-full sm:w-auto text-sm sm:text-base"
+              className="flex items-center justify-center gap-2 bg-green-700 text-white px-6 sm:px-8 py-3 sm:py-3.5 rounded-lg font-semibold hover:bg-green-800 active:bg-green-900 transition-colors w-full sm:w-auto text-base sm:text-lg min-h-[48px] shadow-md hover:shadow-lg"
             >
               <span>Next Step</span>
-              <ArrowRight className="w-4 h-4 sm:w-5 sm:h-5" />
+              <ArrowRight className="w-5 h-5 flex-shrink-0" />
             </button>
           </div>
         </div>

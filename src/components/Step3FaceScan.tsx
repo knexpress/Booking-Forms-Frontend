@@ -1,6 +1,6 @@
 import { useState, useRef, useCallback, useEffect } from 'react'
 import Webcam from 'react-webcam'
-import { Camera, CheckCircle, XCircle, ArrowLeft, Eye, Maximize2, Smile, RotateCw } from 'lucide-react'
+import { Camera, CheckCircle, XCircle, ArrowLeft, ArrowRight, Eye, Maximize2, Smile, RotateCw } from 'lucide-react'
 import { VerificationData } from '../types'
 import { verifyFace, detectLiveness } from '../services/faceRecognitionService'
 import { validateWithTrueID, getTrueIDStatusMessage } from '../services/trueIdService'
@@ -73,7 +73,7 @@ export default function Step3FaceScan({ onComplete, onBack, eidImage, eidBackIma
       })
       .catch((err) => {
         console.error('❌ Failed to load face models:', err)
-        // Continue without auto-detection - manual capture still works
+        // Continue without auto-detection - file upload still available
       })
   }, [])
 
@@ -210,6 +210,16 @@ export default function Step3FaceScan({ onComplete, onBack, eidImage, eidBackIma
 
     detectionIntervalRef.current = window.setInterval(async () => {
       if (!videoRef.current || !canvasRef.current) return
+
+      // Validate video is ready before detection
+      const video = videoRef.current
+      const videoWidth = video.videoWidth || video.clientWidth || 0
+      const videoHeight = video.videoHeight || video.clientHeight || 0
+      
+      // Skip detection if video not ready
+      if (videoWidth === 0 || videoHeight === 0 || video.readyState < 2) {
+        return
+      }
 
       try {
         const detection = await detectFaceInFrame(videoRef.current)
@@ -528,45 +538,46 @@ export default function Step3FaceScan({ onComplete, onBack, eidImage, eidBackIma
   return (
     <div className="space-y-6">
       {/* Sub-Header with Route Badge */}
-      <div className="bg-white border-b border-gray-200">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-          <div className="flex items-center justify-between">
+      <div className="bg-white border-b border-gray-200 sticky top-0 z-10">
+        <div className="max-w-7xl mx-auto px-3 sm:px-4 lg:px-8 py-3 sm:py-4">
+          <div className="flex items-center justify-between gap-2">
             <button
               onClick={onBack}
-              className="flex items-center gap-2 text-gray-700 hover:text-gray-900 transition-colors"
+              className="flex items-center gap-1 sm:gap-2 text-gray-700 hover:text-gray-900 transition-colors min-h-[44px] px-2 sm:px-0"
+              aria-label="Go back"
             >
-              <ArrowLeft className="w-5 h-5" />
-              <span>Back</span>
+              <ArrowLeft className="w-5 h-5 flex-shrink-0" />
+              <span className="hidden sm:inline">Back</span>
             </button>
-            <div className="flex-1 flex justify-center">
-              <div className="flex items-center gap-2 bg-green-600 text-white px-4 py-2 rounded-full">
-                <span className="text-sm font-semibold">{routeDisplay}</span>
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <div className="flex-1 flex justify-center min-w-0">
+              <div className="flex items-center gap-1.5 sm:gap-2 bg-green-600 text-white px-2 sm:px-4 py-1.5 sm:py-2 rounded-full">
+                <span className="text-xs sm:text-sm font-semibold truncate">{routeDisplay}</span>
+                <svg className="w-3.5 h-3.5 sm:w-4 sm:h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
                 </svg>
               </div>
             </div>
-            <div className="text-sm text-gray-600 font-medium">
-              Step 6 of 7: Face Scan
+            <div className="text-xs sm:text-sm text-gray-600 font-medium hidden xs:block whitespace-nowrap">
+              Step 6 of 6
             </div>
           </div>
         </div>
       </div>
 
-      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 pb-8">
-        <div className="bg-white rounded-lg shadow-lg p-8 space-y-6">
+      <div className="max-w-4xl mx-auto px-3 sm:px-4 lg:px-8 pb-6 sm:pb-8">
+        <div className="bg-white rounded-lg shadow-lg p-4 sm:p-6 lg:p-8 space-y-4 sm:space-y-6">
       {/* Header */}
       <div className="text-center">
-        <h2 className="text-3xl font-bold text-gray-800 mb-2">Verify Your Identity</h2>
-        <h3 className="text-xl text-gray-600">Face Scan</h3>
-        <p className="text-sm text-gray-500 mt-2">
+        <h2 className="text-2xl sm:text-3xl font-bold text-gray-800 mb-2">Verify Your Identity</h2>
+        <h3 className="text-lg sm:text-xl text-gray-600">Face Scan</h3>
+        <p className="text-xs sm:text-sm text-gray-500 mt-2">
           Position your face within the frame and follow the instructions
         </p>
       </div>
 
       {/* Instructions */}
-      <div className="bg-blue-50 border-l-4 border-blue-500 p-4 rounded-lg">
-        <h4 className="font-semibold text-blue-800 mb-2">Instructions:</h4>
+      <div className="bg-blue-50 border-l-4 border-blue-500 p-3 sm:p-4 rounded-lg">
+        <h4 className="text-sm sm:text-base font-semibold text-blue-800 mb-2">Instructions:</h4>
         <ul className="text-sm text-blue-700 space-y-1">
           <li>• Position your face within the oval frame</li>
           <li>• Ensure good lighting on your face</li>
@@ -589,11 +600,12 @@ export default function Step3FaceScan({ onComplete, onBack, eidImage, eidBackIma
             <button
               type="button"
               onClick={startScan}
-              className="btn-primary w-full flex items-center justify-center gap-2 text-lg py-4"
+              className="btn-primary w-full flex items-center justify-center gap-2 text-base sm:text-lg py-3 sm:py-4 min-h-[48px]"
             >
-              <Maximize2 className="w-5 h-5" />
-              <Camera className="w-5 h-5" />
-              Start Face Scan (Full Screen)
+            <Maximize2 className="w-4 h-4 sm:w-5 sm:h-5 flex-shrink-0" />
+            <Camera className="w-4 h-4 sm:w-5 sm:h-5 flex-shrink-0" />
+            <span className="hidden xs:inline">Start Face Scan (Full Screen)</span>
+            <span className="xs:hidden">Start Face Scan</span>
             </button>
           </div>
         ) : faceImage ? (
@@ -606,7 +618,7 @@ export default function Step3FaceScan({ onComplete, onBack, eidImage, eidBackIma
             <button
               type="button"
               onClick={retake}
-              className="btn-secondary flex items-center justify-center gap-2 w-full"
+              className="btn-secondary flex items-center justify-center gap-2 w-full min-h-[44px]"
             >
               <Camera className="w-4 h-4" />
               Retake Face Scan
@@ -627,7 +639,7 @@ export default function Step3FaceScan({ onComplete, onBack, eidImage, eidBackIma
                   <button
                     type="button"
                     onClick={requestCameraPermission}
-                    className="btn-primary flex items-center gap-2 text-sm"
+                    className="btn-primary flex items-center justify-center gap-2 text-sm sm:text-base min-h-[44px] px-4 sm:px-6"
                   >
                     <Camera className="w-4 h-4" />
                     Request Camera Access Again
@@ -651,13 +663,13 @@ export default function Step3FaceScan({ onComplete, onBack, eidImage, eidBackIma
       )}
 
       {/* Navigation Buttons */}
-      <div className="flex gap-4 pt-4">
+      <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 pt-4 sm:pt-6">
         <button
           type="button"
           onClick={onBack}
-          className="btn-secondary flex items-center gap-2"
+          className="btn-secondary flex items-center justify-center gap-2 min-h-[48px] w-full sm:w-auto"
         >
-          <ArrowLeft className="w-4 h-4" />
+          <ArrowLeft className="w-4 h-4 sm:w-5 sm:h-5 flex-shrink-0" />
           Back
         </button>
         
@@ -666,9 +678,11 @@ export default function Step3FaceScan({ onComplete, onBack, eidImage, eidBackIma
             type="button"
             onClick={handleContinue}
             disabled={!faceImage || !success}
-            className="btn-primary flex-1"
+            className="btn-primary flex-1 min-h-[48px] flex items-center justify-center gap-2"
           >
-            Proceed to Booking Confirmation →
+            <span>Proceed to Booking Confirmation</span>
+            <ArrowRight className="w-4 h-4 sm:w-5 sm:h-5 flex-shrink-0 hidden sm:inline" />
+            <span className="sm:hidden">→</span>
           </button>
         )}
           </div>
@@ -820,37 +834,13 @@ export default function Step3FaceScan({ onComplete, onBack, eidImage, eidBackIma
                 </div>
               )}
 
-              {/* Manual capture button (fallback) */}
+              {/* Cancel button only */}
               {!isProcessing && !cameraError && faceModelsLoaded && (
                 <div className="space-y-3">
                   <button
                     type="button"
-                    onClick={async () => {
-                      if (webcamRef.current && currentAction) {
-                        setIsProcessing(true)
-                        setError(null)
-                        try {
-                          const imageSrc = webcamRef.current.getScreenshot()
-                          if (imageSrc) {
-                            setFaceImages(prev => [...prev, imageSrc])
-                            setCompletedActions(prev => [...prev, currentAction!])
-                            setIsProcessing(false)
-                          }
-                        } catch (err) {
-                          setError('Failed to capture image')
-                          setIsProcessing(false)
-                        }
-                      }
-                    }}
-                    className="btn-primary w-full py-3 text-lg flex items-center justify-center gap-2"
-                  >
-                    <Camera className="w-5 h-5" />
-                    Capture Manually
-                  </button>
-                  <button
-                    type="button"
                     onClick={closeFaceModal}
-                    className="btn-secondary w-full py-3 text-lg"
+                    className="btn-secondary w-full py-3 text-lg min-h-[48px]"
                   >
                     Cancel & Close
                   </button>

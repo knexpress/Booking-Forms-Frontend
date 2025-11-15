@@ -67,78 +67,81 @@ export default function ServiceSelection({ onSelectService, onBack }: ServiceSel
   return (
     <div className="space-y-6">
       {/* Sub-Header with Route Badge */}
-      <div className="bg-white border-b border-gray-200">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-          <div className="flex items-center justify-between">
+      <div className="bg-white border-b border-gray-200 sticky top-0 z-10">
+        <div className="max-w-7xl mx-auto px-3 sm:px-4 lg:px-8 py-3 sm:py-4">
+          <div className="flex items-center justify-between gap-2">
             <button
               onClick={onBack}
-              className="flex items-center gap-2 text-gray-700 hover:text-gray-900 transition-colors"
+              className="flex items-center gap-1 sm:gap-2 text-gray-700 hover:text-gray-900 transition-colors min-h-[44px] px-2 sm:px-0"
+              aria-label="Go back"
             >
-              <ArrowLeft className="w-5 h-5" />
-              <span>Back</span>
+              <ArrowLeft className="w-5 h-5 flex-shrink-0" />
+              <span className="hidden sm:inline">Back</span>
             </button>
-            <div className="flex-1 flex justify-center">
+            <div className="flex-1 flex justify-center min-w-0">
               {selectedRoute === 'uae-to-pinas' && (
-                <div className="flex items-center gap-2 bg-green-600 text-white px-4 py-2 rounded-full">
-                  <span className="text-sm font-semibold">UAE TO PHILIPPINES</span>
+                <div className="flex items-center gap-1.5 sm:gap-2 bg-green-600 text-white px-2 sm:px-4 py-1.5 sm:py-2 rounded-full">
+                  <span className="text-xs sm:text-sm font-semibold truncate">UAE TO PHILIPPINES</span>
                   <button
                     onClick={() => setSelectedRoute(null)}
-                    className="hover:bg-green-700 rounded-full p-1 transition-colors"
+                    className="hover:bg-green-700 rounded-full p-1 transition-colors flex-shrink-0"
+                    aria-label="Clear selection"
                   >
                     <span className="text-white text-sm">×</span>
                   </button>
                 </div>
               )}
               {selectedRoute === 'ph-to-uae' && (
-                <div className="flex items-center gap-2 bg-green-600 text-white px-4 py-2 rounded-full">
-                  <span className="text-sm font-semibold">PHILIPPINES TO UAE</span>
+                <div className="flex items-center gap-1.5 sm:gap-2 bg-green-600 text-white px-2 sm:px-4 py-1.5 sm:py-2 rounded-full">
+                  <span className="text-xs sm:text-sm font-semibold truncate">PHILIPPINES TO UAE</span>
                   <button
                     onClick={() => setSelectedRoute(null)}
-                    className="hover:bg-green-700 rounded-full p-1 transition-colors"
+                    className="hover:bg-green-700 rounded-full p-1 transition-colors flex-shrink-0"
+                    aria-label="Clear selection"
                   >
                     <span className="text-white text-sm">×</span>
                   </button>
                 </div>
               )}
             </div>
-            <div className="text-sm text-gray-600 font-medium">
-              Step 1 of 7: Select Service
+            <div className="text-xs sm:text-sm text-gray-600 font-medium hidden xs:block whitespace-nowrap">
+              Step 1 of 6
             </div>
           </div>
         </div>
       </div>
 
       {/* Main Content */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-8">
+      <div className="max-w-7xl mx-auto px-3 sm:px-4 lg:px-8 pb-6 sm:pb-8">
 
       {/* Title Section */}
-      <div className="text-center mb-8">
-        <h1 className="text-4xl font-bold text-green-600 mb-2">
+      <div className="text-center mb-6 sm:mb-8">
+        <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-green-600 mb-2">
           Select Service
         </h1>
-        <p className="text-lg text-gray-600">
+        <p className="text-sm sm:text-base lg:text-lg text-gray-600">
           Choose your shipping service
         </p>
       </div>
 
       {/* Service Type Selection */}
-      <div className="flex gap-4 justify-center mb-8">
+      <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 justify-center mb-6 sm:mb-8">
         <button
           onClick={() => handleCargoTypeChange('air')}
-          className={`px-8 py-3 rounded-lg font-semibold text-lg transition-all duration-200 ${
+          className={`px-6 sm:px-8 py-3 sm:py-3.5 rounded-lg font-semibold text-base sm:text-lg transition-all duration-200 min-h-[48px] ${
             cargoType === 'air'
               ? 'bg-green-700 text-white shadow-lg'
-              : 'border-2 border-green-600 text-green-600 bg-white hover:bg-green-50'
+              : 'border-2 border-green-600 text-green-600 bg-white hover:bg-green-50 active:bg-green-100'
           }`}
         >
           AIR CARGO
         </button>
         <button
           onClick={() => handleCargoTypeChange('sea')}
-          className={`px-8 py-3 rounded-lg font-semibold text-lg transition-all duration-200 ${
+          className={`px-6 sm:px-8 py-3 sm:py-3.5 rounded-lg font-semibold text-base sm:text-lg transition-all duration-200 min-h-[48px] ${
             cargoType === 'sea'
               ? 'bg-green-700 text-white shadow-lg'
-              : 'border-2 border-green-600 text-green-600 bg-white hover:bg-green-50'
+              : 'border-2 border-green-600 text-green-600 bg-white hover:bg-green-50 active:bg-green-100'
           }`}
         >
           SEA CARGO
@@ -146,9 +149,9 @@ export default function ServiceSelection({ onSelectService, onBack }: ServiceSel
       </div>
 
       {/* Main Content: Route Cards and Info Panel */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 max-w-7xl mx-auto">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6 lg:gap-8 max-w-7xl mx-auto">
         {/* Left Side: Route Cards */}
-        <div className={`lg:col-span-2 ${cargoType === 'air' ? 'grid grid-cols-1 md:grid-cols-2 gap-6' : 'grid grid-cols-1 gap-6 max-w-md'}`}>
+        <div className={`lg:col-span-2 ${cargoType === 'air' ? 'grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6' : 'grid grid-cols-1 gap-4 sm:gap-6 max-w-md mx-auto lg:mx-0'}`}>
           {/* PINAS TO UAE */}
           <div
             onClick={() => setSelectedRoute('ph-to-uae')}

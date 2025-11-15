@@ -1,6 +1,6 @@
 import { useState, useRef, useCallback, useEffect } from 'react'
 import Webcam from 'react-webcam'
-import { Camera, CheckCircle, XCircle, RotateCcw, ArrowLeft, Maximize2 } from 'lucide-react'
+import { Camera, CheckCircle, XCircle, RotateCcw, ArrowLeft, ArrowRight, Maximize2, Upload } from 'lucide-react'
 import { VerificationData } from '../types'
 import { processEmiratesID, validateEmiratesIDFormat, isEmiratesIDExpired } from '../services/ocrService'
 import { validateIsEmiratesID } from '../services/idValidationService'
@@ -8,6 +8,7 @@ import { API_CONFIG } from '../config/api.config'
 import {
   loadOpenCV,
   detectDocumentInFrame,
+  findDocumentContour,
   cropDocument,
   imageToMat,
   matToBase64,
@@ -39,6 +40,8 @@ export default function Step2EmiratesIDScan({ onComplete, onBack, service }: Ste
   const [backImage, setBackImage] = useState<string | null>(null)
   const [frontCroppedImage, setFrontCroppedImage] = useState<string | null>(null)
   const [backCroppedImage, setBackCroppedImage] = useState<string | null>(null)
+  const [philippinesIdFront, setPhilippinesIdFront] = useState<string | null>(null)
+  const [philippinesIdBack, setPhilippinesIdBack] = useState<string | null>(null)
   const [isProcessing, setIsProcessing] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [eidData, setEidData] = useState<any>(null)
@@ -86,8 +89,8 @@ export default function Step2EmiratesIDScan({ onComplete, onBack, service }: Ste
       .catch((err) => {
         console.error('❌ Failed to load OpenCV:', err)
         // Don't set error - allow manual file upload as fallback
-        // Automatic detection will be disabled, but manual capture still works
-        console.warn('⚠️ Automatic ID detection unavailable. Manual file upload is still available.')
+        // Automatic detection will be disabled, but file upload still works
+        console.warn('⚠️ Automatic ID detection unavailable. File upload is still available.')
       })
 
     return () => {
@@ -679,8 +682,8 @@ export default function Step2EmiratesIDScan({ onComplete, onBack, service }: Ste
             setTimeout(reject, 5000) // 5 second timeout
           })
           
-          const videoMat = imageToMat(img)
-          const points = detectDocumentInFrame(videoMat)
+          const videoMat = await imageToMat(img)
+          const points = findDocumentContour(videoMat)
           
           if (points && points.length >= 4) {
             console.log('✅ Document detected in uploaded image, cropping...')
@@ -894,13 +897,54 @@ export default function Step2EmiratesIDScan({ onComplete, onBack, service }: Ste
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [frontImage, backImage, currentSide, isProcessing, opencvLoaded])
 
+  const handlePhilippinesIdUpload = (e: React.ChangeEvent<HTMLInputElement>, side: 'front' | 'back') => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    const reader = new FileReader()
+    reader.onload = () => {
+      const imageData = reader.result as string
+      if (side === 'front') {
+        setPhilippinesIdFront(imageData)
+      } else {
+        setPhilippinesIdBack(imageData)
+      }
+      setError(null)
+    }
+    reader.onerror = () => {
+      setError('Failed to read image file. Please try again.')
+    }
+    reader.readAsDataURL(file)
+  }
+
+  const handleRemovePhilippinesId = (side: 'front' | 'back') => {
+    if (side === 'front') {
+      setPhilippinesIdFront(null)
+    } else {
+      setPhilippinesIdBack(null)
+    }
+  }
+
   const handleContinue = () => {
     if (frontImage && backImage) {
-      onComplete({
+      const verificationData: Partial<VerificationData> = {
         eidFrontImage: frontImage,
         eidBackImage: backImage,
         eidVerified: true,
-      })
+      }
+      
+      // Add Philippines ID images if route is Philippines to UAE
+      if (isPhToUae) {
+        if (philippinesIdFront && philippinesIdBack) {
+          verificationData.philippinesIdFront = philippinesIdFront
+          verificationData.philippinesIdBack = philippinesIdBack
+        } else {
+          setError('Please upload both front and back of your Philippines ID')
+          return
+        }
+      }
+      
+      onComplete(verificationData)
     } else {
       setError('Please scan both front and back of your Emirates ID')
     }
@@ -909,46 +953,47 @@ export default function Step2EmiratesIDScan({ onComplete, onBack, service }: Ste
   return (
     <div className="space-y-6">
       {/* Sub-Header with Route Badge */}
-      <div className="bg-white border-b border-gray-200">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-          <div className="flex items-center justify-between">
+      <div className="bg-white border-b border-gray-200 sticky top-0 z-10">
+        <div className="max-w-7xl mx-auto px-3 sm:px-4 lg:px-8 py-3 sm:py-4">
+          <div className="flex items-center justify-between gap-2">
             <button
               onClick={onBack}
-              className="flex items-center gap-2 text-gray-700 hover:text-gray-900 transition-colors"
+              className="flex items-center gap-1 sm:gap-2 text-gray-700 hover:text-gray-900 transition-colors min-h-[44px] px-2 sm:px-0"
+              aria-label="Go back"
             >
-              <ArrowLeft className="w-5 h-5" />
-              <span>Back</span>
+              <ArrowLeft className="w-5 h-5 flex-shrink-0" />
+              <span className="hidden sm:inline">Back</span>
             </button>
-            <div className="flex-1 flex justify-center">
-              <div className="flex items-center gap-2 bg-green-600 text-white px-4 py-2 rounded-full">
-                <span className="text-sm font-semibold">{routeDisplay}</span>
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <div className="flex-1 flex justify-center min-w-0">
+              <div className="flex items-center gap-1.5 sm:gap-2 bg-green-600 text-white px-2 sm:px-4 py-1.5 sm:py-2 rounded-full">
+                <span className="text-xs sm:text-sm font-semibold truncate">{routeDisplay}</span>
+                <svg className="w-3.5 h-3.5 sm:w-4 sm:h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
                 </svg>
               </div>
             </div>
-            <div className="text-sm text-gray-600 font-medium">
-              Step 5 of 7: Emirates ID Scan
+            <div className="text-xs sm:text-sm text-gray-600 font-medium hidden xs:block whitespace-nowrap">
+              Step 5 of 6
             </div>
           </div>
         </div>
       </div>
 
-      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 pb-8">
-        <div className="bg-white rounded-lg shadow-lg p-8 space-y-6">
+      <div className="max-w-4xl mx-auto px-3 sm:px-4 lg:px-8 pb-6 sm:pb-8">
+        <div className="bg-white rounded-lg shadow-lg p-4 sm:p-6 lg:p-8 space-y-4 sm:space-y-6">
           {/* Header */}
           <div className="text-center">
-            <h2 className="text-3xl font-bold text-gray-800 mb-2">Verify Your Identity</h2>
-            <h3 className="text-xl text-gray-600">Emirates ID Scan</h3>
-            <p className="text-sm text-gray-500 mt-2">
+            <h2 className="text-2xl sm:text-3xl font-bold text-gray-800 mb-2">Verify Your Identity</h2>
+            <h3 className="text-lg sm:text-xl text-gray-600">Emirates ID Scan</h3>
+            <p className="text-xs sm:text-sm text-gray-500 mt-2">
               Please scan both sides of your UAE Emirates ID for verification
             </p>
           </div>
 
       {/* Instructions */}
-      <div className="bg-blue-50 border-l-4 border-blue-500 p-4 rounded-lg">
-        <h4 className="font-semibold text-blue-800 mb-2">Instructions:</h4>
-        <ul className="text-sm text-blue-700 space-y-1">
+      <div className="bg-blue-50 border-l-4 border-blue-500 p-3 sm:p-4 rounded-lg">
+        <h4 className="text-sm sm:text-base font-semibold text-blue-800 mb-2">Instructions:</h4>
+        <ul className="text-xs sm:text-sm text-blue-700 space-y-1">
           <li>• Position your Emirates ID card within the frame</li>
           <li>• Ensure good lighting with no glare or shadows</li>
           <li>• Keep the ID flat and hold it steady for 1 second</li>
@@ -982,7 +1027,6 @@ export default function Step2EmiratesIDScan({ onComplete, onBack, service }: Ste
                   <li>Grant camera permissions in your browser</li>
                   <li>Use Chrome, Edge, or Firefox browser</li>
                   <li>Access via HTTPS or localhost</li>
-                  <li>Or upload images using the file upload option below</li>
                 </ul>
               </div>
               <div className="mt-4">
@@ -1000,12 +1044,12 @@ export default function Step2EmiratesIDScan({ onComplete, onBack, service }: Ste
         </div>
       )}
 
-      {/* Scanning Interface */}
-      <div className="space-y-6">
-        {/* Front Side */}
-        <div className="bg-white border-2 border-gray-200 rounded-lg p-4 sm:p-6">
-          <div className="flex items-center justify-between mb-4">
-            <h4 className="text-lg font-semibold text-gray-800">Front of Emirates ID</h4>
+        {/* Scanning Interface */}
+        <div className="space-y-4 sm:space-y-6">
+         {/* Front Side */}
+         <div className="bg-white border-2 border-gray-200 rounded-lg p-3 sm:p-4 lg:p-6">
+           <div className="flex items-center justify-between mb-3 sm:mb-4">
+             <h4 className="text-base sm:text-lg font-semibold text-gray-800">Front of Emirates ID</h4>
             {frontImage && (
               <CheckCircle className="w-6 h-6 text-green-500" />
             )}
@@ -1023,9 +1067,9 @@ export default function Step2EmiratesIDScan({ onComplete, onBack, service }: Ste
               <button
                 type="button"
                 onClick={() => retake('front')}
-                className="btn-secondary flex items-center justify-center gap-2 w-full"
+                className="btn-secondary flex items-center justify-center gap-2 w-full min-h-[44px]"
               >
-                <RotateCcw className="w-4 h-4" />
+                <RotateCcw className="w-4 h-4 flex-shrink-0" />
                 Retake Front
               </button>
             </div>
@@ -1034,11 +1078,12 @@ export default function Step2EmiratesIDScan({ onComplete, onBack, service }: Ste
               <button
                 type="button"
                 onClick={() => handleOpenScanModal('front')}
-                className="btn-primary w-full flex items-center justify-center gap-2 py-4 text-base sm:text-lg"
+                className="btn-primary w-full flex items-center justify-center gap-2 py-3 sm:py-4 text-sm sm:text-base lg:text-lg min-h-[48px]"
               >
-                <Maximize2 className="w-5 h-5" />
-                <Camera className="w-5 h-5" />
-                Scan Front of ID (Full Screen)
+                <Maximize2 className="w-4 h-4 sm:w-5 sm:h-5 flex-shrink-0" />
+                <Camera className="w-4 h-4 sm:w-5 sm:h-5 flex-shrink-0" />
+                <span className="hidden xs:inline">Scan Front of ID (Full Screen)</span>
+                <span className="xs:hidden">Scan Front</span>
               </button>
               {cameraError && (
                 <div className="border-2 border-dashed border-gray-300 rounded-lg p-4">
@@ -1071,10 +1116,10 @@ export default function Step2EmiratesIDScan({ onComplete, onBack, service }: Ste
                   {/* Instructions */}
                   <div className="bg-blue-50 border-l-4 border-blue-500 p-2 sm:p-3 rounded">
                     <p className="text-xs sm:text-sm text-blue-800 mb-2">
-                      <strong>Instructions:</strong> Hold your phone at a comfortable distance (about 30-40cm away) and position your Emirates ID card within the centered frame. The system will automatically detect and capture when ready, or you can use the "Capture Manually" button below.
+                      <strong>Instructions:</strong> Hold your phone at a comfortable distance (about 30-40cm away) and position your Emirates ID card within the centered frame. The system will automatically detect and capture when ready.
                     </p>
                     <p className="text-xs text-blue-700">
-                      💡 Tip: Keep the card steady for half a second. If auto-capture doesn't work, use the manual capture button.
+                      💡 Tip: Keep the card steady for half a second. Ensure good lighting and hold the card flat within the frame.
                     </p>
                   </div>
 
@@ -1198,115 +1243,13 @@ export default function Step2EmiratesIDScan({ onComplete, onBack, service }: Ste
                     </div>
                   )}
 
-                  {/* Manual capture button and Cancel */}
+                  {/* Cancel button only */}
                   {!isProcessing && !cameraError && opencvLoaded && (
                     <div className="space-y-3">
                       <button
                         type="button"
-                        onClick={async () => {
-                          if (webcamRef.current && currentSide && videoRef.current) {
-                            setIsProcessing(true)
-                            setError(null)
-                            try {
-                              const imageSrc = webcamRef.current.getScreenshot()
-                              if (imageSrc) {
-                                console.log('📸 Manual capture: Attempting to crop ID card frame...')
-                                setProcessingMessage('Detecting and cropping ID card...')
-                                
-                                // Try to detect and crop the document from the screenshot
-                                let croppedImage = imageSrc // Fallback to full image if cropping fails
-                                
-                                try {
-                                  // Convert screenshot to OpenCV Mat
-                                  const img = new Image()
-                                  img.src = imageSrc
-                                  await new Promise((resolve, reject) => {
-                                    img.onload = resolve
-                                    img.onerror = reject
-                                    setTimeout(reject, 5000) // 5 second timeout
-                                  })
-                                  
-                                  const videoMat = imageToMat(img)
-                                  const points = detectDocumentInFrame(videoMat)
-                                  
-                                  if (points && points.length >= 4) {
-                                    console.log('✅ Document detected in manual capture, cropping...')
-                                    const croppedMat = cropDocument(videoMat, points, 800, 500)
-                                    croppedImage = matToBase64(croppedMat)
-                                    console.log('✅ ID card frame cropped successfully')
-                                    
-                                    // Clean up
-                                    videoMat.delete()
-                                    croppedMat.delete()
-                                  } else {
-                                    console.warn('⚠️ Could not detect document in manual capture, using full image')
-                                  }
-                                } catch (cropError) {
-                                  console.warn('⚠️ Cropping failed for manual capture, using full image:', cropError)
-                                  // Continue with full image as fallback
-                                }
-                                
-                                // Validate that the captured image is actually an Emirates ID
-                                console.log('🔍 Validating manually captured image...')
-                                setProcessingMessage('Validating Emirates ID card...')
-                                const validationResult = await validateIsEmiratesID(croppedImage, currentSide)
-                                
-                                if (!validationResult.isValid || !validationResult.isEmiratesID) {
-                                  throw new Error(
-                                    validationResult.error || 
-                                    `This does not appear to be an Emirates ID card. Please ensure you are scanning the ${currentSide} of a valid Emirates ID.`
-                                  )
-                                }
-                                
-                                console.log('✅ Emirates ID validation passed for manual capture')
-                                
-                                // Store only the cropped image (or full image if cropping failed)
-                                const useTrueID = !API_CONFIG.features.simulationMode
-                                if (useTrueID) {
-                                  if (currentSide === 'front') {
-                                    setFrontImage(croppedImage) // Store cropped image only
-                                    setEidData({ captured: true, mode: 'TRUE-ID' })
-                                  } else {
-                                    setBackImage(croppedImage) // Store cropped image only
-                                  }
-                                } else {
-                                  const result = await processEmiratesID(croppedImage, currentSide) // Use cropped image for OCR
-                                  if (!result.success) {
-                                    throw new Error(result.error || 'Failed to process Emirates ID')
-                                  }
-                                  if (currentSide === 'front' && result.data) {
-                                    setEidData(result.data)
-                                  }
-                                  if (currentSide === 'front') {
-                                    setFrontImage(croppedImage) // Store cropped image only
-                                  } else {
-                                    setBackImage(croppedImage) // Store cropped image only
-                                  }
-                                }
-                                setIsProcessing(false)
-                                setCurrentSide(null)
-                                setTimeout(() => {
-                                  setModalOpen(false)
-                                  setModalSide(null)
-                                  stopAutoDetection()
-                                }, 500)
-                              }
-                            } catch (err) {
-                              console.error('Manual capture error:', err)
-                              setError(err instanceof Error ? err.message : 'Failed to capture image')
-                              setIsProcessing(false)
-                            }
-                          }
-                        }}
-                        className="btn-primary w-full py-3 text-lg flex items-center justify-center gap-2"
-                      >
-                        <Camera className="w-5 h-5" />
-                        Capture Manually
-                      </button>
-                      <button
-                        type="button"
                         onClick={closeScanModal}
-                        className="btn-secondary w-full py-3 text-lg"
+                        className="btn-secondary w-full py-3 text-lg min-h-[48px]"
                       >
                         Cancel & Close
                       </button>
@@ -1348,10 +1291,10 @@ export default function Step2EmiratesIDScan({ onComplete, onBack, service }: Ste
           </IDScanModal>
         </div>
 
-        {/* Back Side */}
-        <div className="bg-white border-2 border-gray-200 rounded-lg p-4 sm:p-6">
-          <div className="flex items-center justify-between mb-4">
-            <h4 className="text-lg font-semibold text-gray-800">Back of Emirates ID</h4>
+         {/* Back Side */}
+         <div className="bg-white border-2 border-gray-200 rounded-lg p-3 sm:p-4 lg:p-6">
+           <div className="flex items-center justify-between mb-3 sm:mb-4">
+             <h4 className="text-base sm:text-lg font-semibold text-gray-800">Back of Emirates ID</h4>
             {backImage && (
               <CheckCircle className="w-6 h-6 text-green-500" />
             )}
@@ -1369,9 +1312,9 @@ export default function Step2EmiratesIDScan({ onComplete, onBack, service }: Ste
               <button
                 type="button"
                 onClick={() => retake('back')}
-                className="btn-secondary flex items-center justify-center gap-2 w-full"
+                className="btn-secondary flex items-center justify-center gap-2 w-full min-h-[44px]"
               >
-                <RotateCcw className="w-4 h-4" />
+                <RotateCcw className="w-4 h-4 flex-shrink-0" />
                 Retake Back
               </button>
             </div>
@@ -1380,11 +1323,12 @@ export default function Step2EmiratesIDScan({ onComplete, onBack, service }: Ste
               <button
                 type="button"
                 onClick={() => handleOpenScanModal('back')}
-                className="btn-primary w-full flex items-center justify-center gap-2 py-4 text-base sm:text-lg"
+                className="btn-primary w-full flex items-center justify-center gap-2 py-3 sm:py-4 text-sm sm:text-base lg:text-lg min-h-[48px]"
               >
-                <Maximize2 className="w-5 h-5" />
-                <Camera className="w-5 h-5" />
-                Scan Back of ID (Full Screen)
+                <Maximize2 className="w-4 h-4 sm:w-5 sm:h-5 flex-shrink-0" />
+                <Camera className="w-4 h-4 sm:w-5 sm:h-5 flex-shrink-0" />
+                <span className="hidden xs:inline">Scan Back of ID (Full Screen)</span>
+                <span className="xs:hidden">Scan Back</span>
               </button>
               {cameraError && (
                 <div className="border-2 border-dashed border-gray-300 rounded-lg p-4">
@@ -1417,10 +1361,10 @@ export default function Step2EmiratesIDScan({ onComplete, onBack, service }: Ste
                   {/* Instructions */}
                   <div className="bg-blue-50 border-l-4 border-blue-500 p-2 sm:p-3 rounded">
                     <p className="text-xs sm:text-sm text-blue-800 mb-2">
-                      <strong>Instructions:</strong> Hold your phone at a comfortable distance (about 30-40cm away) and position your Emirates ID card (back side) within the centered frame. The system will automatically detect and capture when ready, or you can use the "Capture Manually" button below.
+                      <strong>Instructions:</strong> Hold your phone at a comfortable distance (about 30-40cm away) and position your Emirates ID card (back side) within the centered frame. The system will automatically detect and capture when ready.
                     </p>
                     <p className="text-xs text-blue-700">
-                      💡 Tip: Keep the card steady for half a second. If auto-capture doesn't work, use the manual capture button.
+                      💡 Tip: Keep the card steady for half a second. Ensure good lighting and hold the card flat within the frame.
                     </p>
                   </div>
 
@@ -1544,115 +1488,13 @@ export default function Step2EmiratesIDScan({ onComplete, onBack, service }: Ste
                     </div>
                   )}
 
-                  {/* Manual capture button and Cancel */}
+                  {/* Cancel button only */}
                   {!isProcessing && !cameraError && opencvLoaded && (
                     <div className="space-y-3">
                       <button
                         type="button"
-                        onClick={async () => {
-                          if (webcamRef.current && currentSide && videoRef.current) {
-                            setIsProcessing(true)
-                            setError(null)
-                            try {
-                              const imageSrc = webcamRef.current.getScreenshot()
-                              if (imageSrc) {
-                                console.log('📸 Manual capture: Attempting to crop ID card frame...')
-                                setProcessingMessage('Detecting and cropping ID card...')
-                                
-                                // Try to detect and crop the document from the screenshot
-                                let croppedImage = imageSrc // Fallback to full image if cropping fails
-                                
-                                try {
-                                  // Convert screenshot to OpenCV Mat
-                                  const img = new Image()
-                                  img.src = imageSrc
-                                  await new Promise((resolve, reject) => {
-                                    img.onload = resolve
-                                    img.onerror = reject
-                                    setTimeout(reject, 5000) // 5 second timeout
-                                  })
-                                  
-                                  const videoMat = imageToMat(img)
-                                  const points = detectDocumentInFrame(videoMat)
-                                  
-                                  if (points && points.length >= 4) {
-                                    console.log('✅ Document detected in manual capture, cropping...')
-                                    const croppedMat = cropDocument(videoMat, points, 800, 500)
-                                    croppedImage = matToBase64(croppedMat)
-                                    console.log('✅ ID card frame cropped successfully')
-                                    
-                                    // Clean up
-                                    videoMat.delete()
-                                    croppedMat.delete()
-                                  } else {
-                                    console.warn('⚠️ Could not detect document in manual capture, using full image')
-                                  }
-                                } catch (cropError) {
-                                  console.warn('⚠️ Cropping failed for manual capture, using full image:', cropError)
-                                  // Continue with full image as fallback
-                                }
-                                
-                                // Validate that the captured image is actually an Emirates ID
-                                console.log('🔍 Validating manually captured image...')
-                                setProcessingMessage('Validating Emirates ID card...')
-                                const validationResult = await validateIsEmiratesID(croppedImage, currentSide)
-                                
-                                if (!validationResult.isValid || !validationResult.isEmiratesID) {
-                                  throw new Error(
-                                    validationResult.error || 
-                                    `This does not appear to be an Emirates ID card. Please ensure you are scanning the ${currentSide} of a valid Emirates ID.`
-                                  )
-                                }
-                                
-                                console.log('✅ Emirates ID validation passed for manual capture')
-                                
-                                // Store only the cropped image (or full image if cropping failed)
-                                const useTrueID = !API_CONFIG.features.simulationMode
-                                if (useTrueID) {
-                                  if (currentSide === 'front') {
-                                    setFrontImage(croppedImage) // Store cropped image only
-                                    setEidData({ captured: true, mode: 'TRUE-ID' })
-                                  } else {
-                                    setBackImage(croppedImage) // Store cropped image only
-                                  }
-                                } else {
-                                  const result = await processEmiratesID(croppedImage, currentSide) // Use cropped image for OCR
-                                  if (!result.success) {
-                                    throw new Error(result.error || 'Failed to process Emirates ID')
-                                  }
-                                  if (currentSide === 'front' && result.data) {
-                                    setEidData(result.data)
-                                  }
-                                  if (currentSide === 'front') {
-                                    setFrontImage(croppedImage) // Store cropped image only
-                                  } else {
-                                    setBackImage(croppedImage) // Store cropped image only
-                                  }
-                                }
-                                setIsProcessing(false)
-                                setCurrentSide(null)
-                                setTimeout(() => {
-                                  setModalOpen(false)
-                                  setModalSide(null)
-                                  stopAutoDetection()
-                                }, 500)
-                              }
-                            } catch (err) {
-                              console.error('Manual capture error:', err)
-                              setError(err instanceof Error ? err.message : 'Failed to capture image')
-                              setIsProcessing(false)
-                            }
-                          }
-                        }}
-                        className="btn-primary w-full py-3 text-lg flex items-center justify-center gap-2"
-                      >
-                        <Camera className="w-5 h-5" />
-                        Capture Manually
-                      </button>
-                      <button
-                        type="button"
                         onClick={closeScanModal}
-                        className="btn-secondary w-full py-3 text-lg"
+                        className="btn-secondary w-full py-3 text-lg min-h-[48px]"
                       >
                         Cancel & Close
                       </button>
@@ -1695,6 +1537,114 @@ export default function Step2EmiratesIDScan({ onComplete, onBack, service }: Ste
         </div>
       </div>
 
+      {/* Philippines ID Upload Section - Only show for Philippines to UAE route */}
+      {isPhToUae && (
+        <div className="space-y-4 sm:space-y-6">
+          <div className="bg-blue-50 border-2 border-blue-500 rounded-lg p-3 sm:p-4 lg:p-6">
+            <h3 className="text-base sm:text-lg font-bold text-blue-800 mb-2">Philippines ID Upload</h3>
+            <p className="text-xs sm:text-sm text-blue-700 mb-3 sm:mb-4">
+              Please upload clear photos of both sides of your Philippines ID document.
+            </p>
+
+            {/* Front of Philippines ID */}
+            <div className="bg-white border-2 border-gray-200 rounded-lg p-3 sm:p-4 lg:p-6 mb-3 sm:mb-4">
+              <div className="flex items-center justify-between mb-3 sm:mb-4">
+                <h4 className="text-base sm:text-lg font-semibold text-gray-800">Front of Philippines ID</h4>
+                {philippinesIdFront && (
+                  <CheckCircle className="w-6 h-6 text-green-500" />
+                )}
+              </div>
+
+              {philippinesIdFront ? (
+                <div className="space-y-4">
+                  <div className="relative rounded-lg overflow-hidden border-2 border-green-500">
+                    <img
+                      src={philippinesIdFront}
+                      alt="Philippines ID Front"
+                      className="w-full h-auto max-h-64 sm:max-h-96 object-contain bg-gray-50"
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => handleRemovePhilippinesId('front')}
+                    className="btn-secondary flex items-center justify-center gap-2 w-full min-h-[44px]"
+                  >
+                    <RotateCcw className="w-4 h-4 flex-shrink-0" />
+                    <span className="hidden xs:inline">Remove & Re-upload Front</span>
+                    <span className="xs:hidden">Re-upload Front</span>
+                  </button>
+                </div>
+              ) : (
+                <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center">
+                  <Upload className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+                  <label className="block cursor-pointer">
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={(e) => handlePhilippinesIdUpload(e, 'front')}
+                      className="hidden"
+                    />
+                    <span className="btn-primary inline-flex items-center justify-center gap-2 min-h-[44px] px-4 sm:px-6">
+                      <Upload className="w-4 h-4 sm:w-5 sm:h-5 flex-shrink-0" />
+                      <span className="text-sm sm:text-base">Upload Front of Philippines ID</span>
+                    </span>
+                  </label>
+                  <p className="text-xs text-gray-500 mt-2">Accepted formats: JPG, PNG, etc.</p>
+                </div>
+              )}
+            </div>
+
+            {/* Back of Philippines ID */}
+            <div className="bg-white border-2 border-gray-200 rounded-lg p-3 sm:p-4 lg:p-6">
+              <div className="flex items-center justify-between mb-3 sm:mb-4">
+                <h4 className="text-base sm:text-lg font-semibold text-gray-800">Back of Philippines ID</h4>
+                {philippinesIdBack && (
+                  <CheckCircle className="w-6 h-6 text-green-500" />
+                )}
+              </div>
+
+              {philippinesIdBack ? (
+                <div className="space-y-4">
+                  <div className="relative rounded-lg overflow-hidden border-2 border-green-500">
+                    <img
+                      src={philippinesIdBack}
+                      alt="Philippines ID Back"
+                      className="w-full h-auto max-h-64 sm:max-h-96 object-contain bg-gray-50"
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => handleRemovePhilippinesId('back')}
+                    className="btn-secondary flex items-center justify-center gap-2 w-full min-h-[44px]"
+                  >
+                    <RotateCcw className="w-4 h-4 flex-shrink-0" />
+                    <span className="hidden xs:inline">Remove & Re-upload Back</span>
+                    <span className="xs:hidden">Re-upload Back</span>
+                  </button>
+                </div>
+              ) : (
+                <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center">
+                  <Upload className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+                  <label className="block cursor-pointer">
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={(e) => handlePhilippinesIdUpload(e, 'back')}
+                      className="hidden"
+                    />
+                    <span className="btn-primary inline-flex items-center justify-center gap-2 min-h-[44px] px-4 sm:px-6">
+                      <Upload className="w-4 h-4 sm:w-5 sm:h-5 flex-shrink-0" />
+                      <span className="text-sm sm:text-base">Upload Back of Philippines ID</span>
+                    </span>
+                  </label>
+                  <p className="text-xs text-gray-500 mt-2">Accepted formats: JPG, PNG, etc.</p>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Status Messages */}
       {error && (
         <div className="bg-red-50 border-l-4 border-red-500 p-4 rounded-lg flex items-start gap-2">
@@ -1706,23 +1656,25 @@ export default function Step2EmiratesIDScan({ onComplete, onBack, service }: Ste
       {/* Success details intentionally hidden per requirement */}
 
           {/* Navigation Buttons */}
-          <div className="flex gap-4 pt-4">
+          <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 pt-4 sm:pt-6">
             <button
               type="button"
               onClick={onBack}
-              className="btn-secondary flex items-center gap-2"
+              className="btn-secondary flex items-center justify-center gap-2 min-h-[48px] w-full sm:w-auto"
             >
-              <ArrowLeft className="w-4 h-4" />
+              <ArrowLeft className="w-4 h-4 sm:w-5 sm:h-5 flex-shrink-0" />
               Back
             </button>
             
             <button
               type="button"
               onClick={handleContinue}
-              disabled={!frontImage || !backImage}
-              className="btn-primary flex-1"
+              disabled={!frontImage || !backImage || (isPhToUae && (!philippinesIdFront || !philippinesIdBack))}
+              className="btn-primary flex-1 min-h-[48px] flex items-center justify-center gap-2"
             >
-              Proceed to Face Scan →
+              <span>Proceed to Face Scan</span>
+              <ArrowRight className="w-4 h-4 sm:w-5 sm:h-5 flex-shrink-0 hidden sm:inline" />
+              <span className="sm:hidden">→</span>
             </button>
           </div>
         </div>

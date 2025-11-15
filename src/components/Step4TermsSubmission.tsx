@@ -74,20 +74,26 @@ export default function Step4TermsSubmission({ onSubmit, onBack }: Step4Props) {
           </section>
 
           <section>
-            <h4 className="font-bold text-gray-800 text-base mb-2">4. PROHIBITED AND RESTRICTED ITEMS</h4>
-            <p className="mb-2">The following items are strictly prohibited:</p>
+            <h4 className="font-bold text-gray-800 text-base mb-2">4. BANNED ITEMS</h4>
+            <p className="mb-2 font-semibold">Please be reminded that the following items are STRICTLY PROHIBITED from shipment:</p>
             <ul className="list-disc pl-6 space-y-1">
-              <li>Any food items containing pork or pork derivatives</li>
-              <li>Weapons, firearms, and ammunition</li>
-              <li>Currency, money, and negotiable instruments</li>
-              <li>Batteries (car, machine, and large batteries)</li>
-              <li>Jewelry and precious stones</li>
-              <li>Medical items and pharmaceuticals</li>
-              <li>Cigarettes and tobacco products</li>
-              <li>Items exceeding 200cm in length</li>
-              <li>Illegal substances and contraband</li>
-              <li>Hazardous materials and explosives</li>
+              <li>Flammable / Explosive Items</li>
+              <li>Deadly Weapons</li>
+              <li>Illegal Drugs / Vape / Cigarettes / Alcoholic Drinks</li>
+              <li>Expensive / Original Jewelries (gold or silver)</li>
+              <li>Money / Cash</li>
+              <li>Live Animals</li>
+              <li>Frozen Goods / Any Pork Items</li>
+              <li>Medicines / Supplements / Capsules / Vitamins / Injectables</li>
+              <li>Adult Toys</li>
+              <li>Religious Items</li>
+              <li>Long items (more than 200 cm are not allowed)</li>
+              <li>Contact lens / Eye drops / Eye solution</li>
+              <li>Perishable Goods (spoils easily)</li>
             </ul>
+            <p className="mt-2 font-bold text-red-600">
+              Anything Illegal is STRICTLY BANNED.
+            </p>
             <p className="mt-2 font-semibold text-red-600">
               Shipping prohibited items is a criminal offense and punishable by law. The sender will be held fully 
               responsible for any legal consequences.

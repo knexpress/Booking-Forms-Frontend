@@ -7,13 +7,13 @@ import ServiceSelection from './components/ServiceSelection'
 import Step1BookingForm from './components/Step1BookingForm'
 import ReceiverDetailsForm from './components/ReceiverDetailsForm'
 import CommoditiesDeclaration from './components/CommoditiesDeclaration'
-import AdditionalDetails from './components/AdditionalDetails'
 import Step2EmiratesIDScan from './components/Step2EmiratesIDScan'
 import Step3FaceScan from './components/Step3FaceScan'
 import BookingConfirmation from './components/BookingConfirmation'
 import ToastContainer, { showToast } from './components/ToastContainer'
 import { generateBookingPDF } from './utils/pdfGenerator'
 import ErrorBoundary from './components/ErrorBoundary'
+import LoadingOverlay from './components/LoadingOverlay'
 
 function App() {
   const [currentStep, setCurrentStep] = useState<Step>(-1 as Step) // Start at -1 for landing page
@@ -23,14 +23,29 @@ function App() {
     eidVerified: false,
     faceVerified: false,
   })
+  const [isLoading, setIsLoading] = useState(false)
+  const [loadingMessage, setLoadingMessage] = useState('Loading...')
+
+  const navigateToStep = (step: Step, message: string = 'Loading...') => {
+    setIsLoading(true)
+    setLoadingMessage(message)
+    // Small delay to show loading animation, then navigate
+    setTimeout(() => {
+      setCurrentStep(step)
+      // Hide loading after a brief moment to allow component to render
+      setTimeout(() => {
+        setIsLoading(false)
+      }, 100)
+    }, 300)
+  }
 
   const handleBookShipment = () => {
-    setCurrentStep(0) // Go to route selection
+    navigateToStep(0, 'Preparing booking form...')
   }
 
   const handleServiceSelection = (service: string) => {
     setSelectedService(service)
-    setCurrentStep(1) // Go to sender details form
+    navigateToStep(1, 'Loading sender details form...')
   }
 
   const handleSenderDetailsNext = (senderData: Partial<BookingFormData>) => {
@@ -39,7 +54,7 @@ function App() {
       ...senderData,
       service: selectedService || senderData.service || 'uae-to-pinas'
     } as BookingFormData))
-    setCurrentStep(2) // Go to receiver details form
+    navigateToStep(2, 'Loading receiver details form...')
   }
 
   const handleReceiverDetailsNext = (receiverData: Partial<BookingFormData>) => {
@@ -49,7 +64,7 @@ function App() {
       service: selectedService || prev?.service || 'uae-to-pinas',
       items: prev?.items || []
     } as BookingFormData))
-    setCurrentStep(3) // Go to Commodities Declaration
+    navigateToStep(3, 'Loading commodities declaration...')
   }
 
   const handleCommoditiesNext = (items: ItemDeclaration[]) => {
@@ -57,41 +72,30 @@ function App() {
       ...prev,
       items
     } as BookingFormData))
-    setCurrentStep(4) // Go to Additional Details
-  }
-
-  const handleAdditionalDetailsNext = (additionalData: {
-    paymentMethod: 'cash' | 'bank'
-    email?: string
-    additionalInstructions?: string
-  }) => {
-    setBookingData(prev => ({
-      ...prev,
-      receiver: prev?.receiver ? {
-        ...prev.receiver,
-        emailAddress: additionalData.email || prev.receiver.emailAddress
-      } : prev?.receiver,
-      additionalDetails: additionalData
-    } as BookingFormData))
-    setCurrentStep(5) // Go to Emirates ID Scan
+    navigateToStep(5, 'Preparing ID scan...')
   }
 
   const handleStep2Complete = (eidData: Partial<VerificationData>) => {
     setVerificationData(prev => ({ ...prev, ...eidData, eidVerified: true }))
-    setCurrentStep(6) // Go to Face Scan
+    navigateToStep(6, 'Preparing face scan...')
   }
 
   const handleStep3Complete = (faceData: Partial<VerificationData>) => {
     setVerificationData(prev => ({ ...prev, ...faceData, faceVerified: true }))
-    setCurrentStep(7) // Go to Terms & Submission
+    navigateToStep(7, 'Loading confirmation...')
   }
 
   const handleFinalSubmit = async () => {
+    setIsLoading(true)
+    setLoadingMessage('Submitting your booking...')
+    
     const finalData = {
       ...bookingData!,
       service: selectedService || 'uae-to-pinas',
       eidFrontImage: verificationData.eidFrontImage,
       eidBackImage: verificationData.eidBackImage,
+      philippinesIdFront: verificationData.philippinesIdFront, // Philippines ID Front (for Philippines to UAE route)
+      philippinesIdBack: verificationData.philippinesIdBack, // Philippines ID Back (for Philippines to UAE route)
       customerImage: verificationData.faceImage, // Keep for backward compatibility (first image)
       customerImages: verificationData.faceImages || (verificationData.faceImage ? [verificationData.faceImage] : []), // All face images
       termsAccepted: true,
@@ -109,6 +113,8 @@ function App() {
       })
       
       const result = await response.json()
+      
+      setIsLoading(false)
       
       if (result.success) {
         console.log('✅ Booking saved successfully!')
@@ -131,6 +137,8 @@ function App() {
                 items: finalData.items,
                 eidFrontImage: verificationData.eidFrontImage,
                 eidBackImage: verificationData.eidBackImage,
+                philippinesIdFront: verificationData.philippinesIdFront,
+                philippinesIdBack: verificationData.philippinesIdBack,
                 customerImage: verificationData.faceImage, // Single image for backward compatibility
                 customerImages: verificationData.faceImages || (verificationData.faceImage ? [verificationData.faceImage] : []), // All face images
                 submissionTimestamp: finalData.submissionTimestamp,
@@ -163,6 +171,7 @@ function App() {
         })
       }
     } catch (error) {
+      setIsLoading(false)
       console.error('❌ Network error:', error)
       showToast({
         type: 'error',
@@ -175,26 +184,25 @@ function App() {
   const handleBack = () => {
     // Going back logic
     if (currentStep === 7) {
-      setCurrentStep(6) // From terms back to face scan
+      navigateToStep(6, 'Going back...')
     } else if (currentStep === 6) {
-      setCurrentStep(5) // From face scan back to EID scan
+      navigateToStep(5, 'Going back...')
     } else if (currentStep === 5) {
-      setCurrentStep(4) // From EID scan back to additional details
-    } else if (currentStep === 4) {
-      setCurrentStep(3) // From additional details back to commodities declaration
+      navigateToStep(3, 'Going back...')
     } else if (currentStep === 3) {
-      setCurrentStep(2) // From commodities declaration back to receiver details
+      navigateToStep(2, 'Going back...')
     } else if (currentStep === 2) {
-      setCurrentStep(1) // From receiver details back to sender details
+      navigateToStep(1, 'Going back...')
     } else if (currentStep === 1) {
-      setCurrentStep(0 as Step) // From sender details back to service selection
+      navigateToStep(0 as Step, 'Going back...')
     } else if (currentStep === 0) {
-      setCurrentStep(-1 as Step) // From service selection back to landing page
+      navigateToStep(-1 as Step, 'Going back...')
     }
   }
 
   return (
     <div className="min-h-screen flex flex-col bg-gray-100">
+      <LoadingOverlay isVisible={isLoading} message={loadingMessage} />
       <ToastContainer />
       <Header onBookNow={currentStep === -1 ? undefined : handleBookShipment} />
       {currentStep === -1 ? (
@@ -327,16 +335,7 @@ function App() {
                   service={selectedService} 
                 />
               )}
-                
-              {currentStep === 4 && (
-                <AdditionalDetails 
-                  onNext={handleAdditionalDetailsNext} 
-                  onBack={handleBack}
-                  initialData={bookingData} 
-                  service={selectedService} 
-                />
-              )}
-                
+              
               {currentStep === 5 && (
                 <Step2EmiratesIDScan 
                   onComplete={handleStep2Complete}

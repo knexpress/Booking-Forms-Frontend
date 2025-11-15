@@ -182,7 +182,85 @@ export function calculateBlurScore(src: any): number {
 }
 
 /**
- * Find the largest rectangle contour in the image
+ * Calculate aspect ratio of a bounding rectangle
+ */
+function calculateAspectRatio(points: any[]): number {
+  if (points.length < 4) return 0;
+  
+  const xs = points.map(p => p.x);
+  const ys = points.map(p => p.y);
+  const width = Math.max(...xs) - Math.min(...xs);
+  const height = Math.max(...ys) - Math.min(...ys);
+  
+  if (height === 0) return 0;
+  return width / height;
+}
+
+/**
+ * Calculate bounding rectangle area
+ */
+function calculateBoundingArea(points: any[]): number {
+  if (points.length < 4) return 0;
+  
+  const xs = points.map(p => p.x);
+  const ys = points.map(p => p.y);
+  const width = Math.max(...xs) - Math.min(...xs);
+  const height = Math.max(...ys) - Math.min(...ys);
+  
+  return width * height;
+}
+
+/**
+ * Check if the shape matches ID card dimensions
+ * Emirates ID card aspect ratio: ~1.586:1 (standard ID-1 format: 85.6mm × 53.98mm)
+ * Acceptable range: 1.4:1 to 1.7:1 (allowing for perspective and angle)
+ */
+function isValidIDCardShape(points: any[], imageWidth: number, imageHeight: number): boolean {
+  if (points.length < 4) return false;
+  
+  const aspectRatio = calculateAspectRatio(points);
+  const boundingArea = calculateBoundingArea(points);
+  const imageArea = imageWidth * imageHeight;
+  
+  // Aspect ratio check - ID cards are roughly 1.586:1 (width:height)
+  // Accept range: 1.3 to 1.8 (allowing for perspective distortion)
+  const minAspectRatio = 1.3;
+  const maxAspectRatio = 1.8;
+  
+  if (aspectRatio < minAspectRatio || aspectRatio > maxAspectRatio) {
+    return false;
+  }
+  
+  // Size check - ID card should take up a reasonable portion of the image
+  // Minimum: 15% of image area (filters out chips and small objects)
+  // Maximum: 90% of image area (filters out full-frame detections)
+  const minAreaRatio = 0.15;
+  const maxAreaRatio = 0.90;
+  const areaRatio = boundingArea / imageArea;
+  
+  if (areaRatio < minAreaRatio || areaRatio > maxAreaRatio) {
+    return false;
+  }
+  
+  // Minimum absolute size - must be large enough to be a card, not a chip
+  // Cards are typically at least 200x120 pixels when detected
+  const minWidth = 150;
+  const minHeight = 100;
+  const xs = points.map(p => p.x);
+  const ys = points.map(p => p.y);
+  const width = Math.max(...xs) - Math.min(...xs);
+  const height = Math.max(...ys) - Math.min(...ys);
+  
+  if (width < minWidth || height < minHeight) {
+    return false;
+  }
+  
+  return true;
+}
+
+/**
+ * Find the largest ID card-shaped contour in the image
+ * Specifically filters for Emirates ID card dimensions and proportions
  */
 export function findDocumentContour(src: any): any[] | null {
   if (!window.cv || !window.cv.Mat) {
@@ -208,6 +286,9 @@ export function findDocumentContour(src: any): any[] | null {
       gray = src.clone();
     }
 
+    const imageWidth = src.cols;
+    const imageHeight = src.rows;
+
     // Detect if device is mobile for adaptive parameters
     const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent) || window.innerWidth < 768;
     
@@ -215,47 +296,87 @@ export function findDocumentContour(src: any): any[] | null {
     const blurSize = isMobile ? 7 : 5;
     window.cv.GaussianBlur(gray, blur, new window.cv.Size(blurSize, blurSize), 0);
 
-    // Apply Canny edge detection - much lower thresholds for easier detection
-    const cannyLow = isMobile ? 20 : 30;
-    const cannyHigh = isMobile ? 80 : 120;
+    // Apply Canny edge detection - tuned for better card detection
+    const cannyLow = isMobile ? 25 : 35;
+    const cannyHigh = isMobile ? 90 : 130;
     window.cv.Canny(blur, edges, cannyLow, cannyHigh);
+
+    // Apply morphological operations to close gaps in card edges
+    const kernel = window.cv.getStructuringElement(window.cv.MORPH_RECT, new window.cv.Size(3, 3));
+    const closed = new window.cv.Mat();
+    window.cv.morphologyEx(edges, closed, window.cv.MORPH_CLOSE, kernel);
+    kernel.delete();
 
     // Find contours
     window.cv.findContours(
-      edges,
+      closed,
       contours,
       hierarchy,
       window.cv.RETR_EXTERNAL,
       window.cv.CHAIN_APPROX_SIMPLE
     );
 
-    let maxArea = 0;
-    let largestContour: any = null;
+    let bestContour: any = null;
+    let bestScore = 0;
 
-    // Find the largest contour
+    // Find the best ID card-shaped contour
     for (let i = 0; i < contours.size(); i++) {
       const contour = contours.get(i);
       const area = window.cv.contourArea(contour);
 
-      // Adaptive minimum area threshold - much lower for easier detection
-      const minArea = isMobile ? 3000 : 6000;
-      if (area > maxArea && area > minArea) {
-        // Approximate contour to polygon - more lenient epsilon for mobile
-        const epsilonFactor = isMobile ? 0.03 : 0.02;
-        const epsilon = epsilonFactor * window.cv.arcLength(contour, true);
-        const approx = new window.cv.Mat();
-        window.cv.approxPolyDP(contour, approx, epsilon, true);
+      // Minimum area threshold - filters out tiny objects like chips
+      const minArea = isMobile ? 5000 : 8000;
+      if (area < minArea) {
+        contour.delete();
+        continue;
+      }
 
-        // Check if it's roughly rectangular (4-6 corners, more lenient for mobile)
-        const minCorners = isMobile ? 4 : 4;
-        const maxCorners = isMobile ? 8 : 6;
-        if (approx.rows >= minCorners && approx.rows <= maxCorners) {
-          maxArea = area;
-          largestContour = approx;
+      // Approximate contour to polygon
+      const epsilonFactor = isMobile ? 0.025 : 0.02;
+      const epsilon = epsilonFactor * window.cv.arcLength(contour, true);
+      const approx = new window.cv.Mat();
+      window.cv.approxPolyDP(contour, approx, epsilon, true);
+
+      // Check if it's roughly rectangular (4-8 corners acceptable)
+      const minCorners = 4;
+      const maxCorners = 8;
+      if (approx.rows < minCorners || approx.rows > maxCorners) {
+        approx.delete();
+        contour.delete();
+        continue;
+      }
+
+      // Convert to points array for validation
+      const points: any[] = [];
+      for (let j = 0; j < approx.rows; j++) {
+        points.push({
+          x: approx.data32S[j * 2],
+          y: approx.data32S[j * 2 + 1],
+        });
+      }
+
+      // Validate if it matches ID card shape characteristics
+      if (isValidIDCardShape(points, imageWidth, imageHeight)) {
+        // Score based on area and aspect ratio match (closer to 1.586 is better)
+        const aspectRatio = calculateAspectRatio(points);
+        const idealAspectRatio = 1.586;
+        const aspectRatioScore = 1 - Math.abs(aspectRatio - idealAspectRatio) / idealAspectRatio;
+        const areaScore = Math.min(area / (imageWidth * imageHeight * 0.3), 1); // Prefer cards that are 30% of image
+        const score = aspectRatioScore * 0.6 + areaScore * 0.4;
+
+        if (score > bestScore) {
+          if (bestContour) {
+            bestContour.delete();
+          }
+          bestScore = score;
+          bestContour = approx;
         } else {
           approx.delete();
         }
+      } else {
+        approx.delete();
       }
+      
       contour.delete();
     }
 
@@ -263,19 +384,24 @@ export function findDocumentContour(src: any): any[] | null {
     gray.delete();
     blur.delete();
     edges.delete();
+    closed.delete();
     hierarchy.delete();
     contours.delete();
 
-    if (largestContour) {
+    if (bestContour) {
       // Convert contour points to array
       const points: any[] = [];
-      for (let i = 0; i < largestContour.rows; i++) {
+      for (let i = 0; i < bestContour.rows; i++) {
         points.push({
-          x: largestContour.data32S[i * 2],
-          y: largestContour.data32S[i * 2 + 1],
+          x: bestContour.data32S[i * 2],
+          y: bestContour.data32S[i * 2 + 1],
         });
       }
-      largestContour.delete();
+      bestContour.delete();
+      console.log('✅ Valid ID card shape detected:', {
+        aspectRatio: calculateAspectRatio(points).toFixed(2),
+        areaRatio: (calculateBoundingArea(points) / (imageWidth * imageHeight) * 100).toFixed(1) + '%'
+      });
       return points;
     }
 
@@ -483,11 +609,77 @@ export async function imageToMat(imageSrc: string | HTMLImageElement | HTMLVideo
 }
 
 /**
- * Detect document in video frame
+ * Calculate guide frame bounds (Region of Interest) for detection
+ * Returns ROI bounds: { x, y, width, height }
+ */
+export function calculateGuideFrameROI(
+  videoWidth: number,
+  videoHeight: number
+): { x: number; y: number; width: number; height: number } | null {
+  if (!videoWidth || !videoHeight) {
+    return null;
+  }
+
+  // Guide frame dimensions match the UI frame (centered, ID card aspect ratio)
+  const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent) || window.innerWidth < 768;
+  const isSmallScreen = window.innerWidth >= 640 && window.innerWidth < 768; // sm breakpoint
+  const isMediumScreen = window.innerWidth >= 768; // md breakpoint
+
+  // Frame width as percentage of video width
+  let frameWidthPercent = 0.70; // Default for mobile (70%)
+  if (isSmallScreen) {
+    frameWidthPercent = 0.65; // Small screens (65%)
+  } else if (isMediumScreen) {
+    frameWidthPercent = 0.60; // Medium+ screens (60%)
+  }
+
+  // Calculate frame width and height (maintaining ID card aspect ratio: 85.6/53.98 ≈ 1.586)
+  const idCardAspectRatio = 85.6 / 53.98;
+  let frameWidth = videoWidth * frameWidthPercent;
+  let frameHeight = frameWidth / idCardAspectRatio;
+
+  // Apply max width constraints (matching UI constraints)
+  const maxWidth = isMobile ? 320 : 400;
+  const maxHeight = isMobile ? 200 : 250;
+
+  if (frameWidth > maxWidth) {
+    frameWidth = maxWidth;
+    frameHeight = frameWidth / idCardAspectRatio;
+  }
+  if (frameHeight > maxHeight) {
+    frameHeight = maxHeight;
+    frameWidth = frameHeight * idCardAspectRatio;
+  }
+
+  // Ensure frame doesn't exceed video dimensions
+  frameWidth = Math.min(frameWidth, videoWidth);
+  frameHeight = Math.min(frameHeight, videoHeight);
+
+  // Center the frame
+  const x = Math.max(0, (videoWidth - frameWidth) / 2);
+  const y = Math.max(0, (videoHeight - frameHeight) / 2);
+
+  // Ensure ROI is within bounds
+  const roiX = Math.floor(Math.max(0, x));
+  const roiY = Math.floor(Math.max(0, y));
+  const roiWidth = Math.floor(Math.min(frameWidth, videoWidth - roiX));
+  const roiHeight = Math.floor(Math.min(frameHeight, videoHeight - roiY));
+
+  return {
+    x: roiX,
+    y: roiY,
+    width: roiWidth,
+    height: roiHeight,
+  };
+}
+
+/**
+ * Detect document in video frame (only within guide frame region)
  * Returns detection result with contour points and blur score
  */
 export async function detectDocumentInFrame(
-  videoElement: HTMLVideoElement
+  videoElement: HTMLVideoElement,
+  useROI: boolean = true // Only detect within guide frame by default
 ): Promise<{
   detected: boolean;
   points: any[] | null;
@@ -499,19 +691,74 @@ export async function detectDocumentInFrame(
   }
 
   try {
-    const mat = await imageToMat(videoElement);
-    if (!mat) {
+    const fullMat = await imageToMat(videoElement);
+    if (!fullMat) {
       return null;
+    }
+
+    const videoWidth = fullMat.cols;
+    const videoHeight = fullMat.rows;
+
+    let mat = fullMat;
+    let roiOffsetX = 0;
+    let roiOffsetY = 0;
+
+    // Crop to guide frame region if requested
+    if (useROI) {
+      const roi = calculateGuideFrameROI(videoWidth, videoHeight);
+      
+      if (roi && roi.width > 0 && roi.height > 0 && 
+          roi.x >= 0 && roi.y >= 0 && 
+          roi.x + roi.width <= videoWidth && 
+          roi.y + roi.height <= videoHeight) {
+        
+        // Extract ROI from full image
+        const roiRect = new window.cv.Rect(roi.x, roi.y, roi.width, roi.height);
+        mat = fullMat.roi(roiRect);
+        
+        // Store offset to adjust points back to full video coordinates
+        roiOffsetX = roi.x;
+        roiOffsetY = roi.y;
+        
+        console.log('🎯 Detection limited to guide frame ROI:', {
+          roi,
+          videoSize: { width: videoWidth, height: videoHeight },
+          roiPercent: {
+            width: ((roi.width / videoWidth) * 100).toFixed(1) + '%',
+            height: ((roi.height / videoHeight) * 100).toFixed(1) + '%'
+          }
+        });
+      } else {
+        console.warn('⚠️ Invalid ROI, using full frame for detection:', roi);
+      }
     }
 
     const blurScore = calculateBlurScore(mat);
     const points = findDocumentContour(mat);
 
-    mat.delete();
+    // Adjust points back to full video coordinates if ROI was used
+    let adjustedPoints = points;
+    if (useROI && points && points.length >= 4 && (roiOffsetX !== 0 || roiOffsetY !== 0)) {
+      adjustedPoints = points.map(point => ({
+        x: point.x + roiOffsetX,
+        y: point.y + roiOffsetY,
+      }));
+      console.log('📍 Adjusted detection points to full video coordinates:', {
+        original: points,
+        adjusted: adjustedPoints,
+        offset: { x: roiOffsetX, y: roiOffsetY }
+      });
+    }
+
+    // Cleanup
+    if (mat !== fullMat) {
+      mat.delete();
+    }
+    fullMat.delete();
 
     return {
-      detected: points !== null && points.length >= 4,
-      points: points || null,
+      detected: adjustedPoints !== null && adjustedPoints.length >= 4,
+      points: adjustedPoints || null,
       blurScore,
       stable: false, // Stability is checked over time by the component
     };

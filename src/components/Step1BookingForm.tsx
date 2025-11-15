@@ -1,8 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useForm } from 'react-hook-form'
-import { ArrowLeft, ArrowRight, MapPin, Plane, ChevronDown, AlertCircle } from 'lucide-react'
+import { ArrowLeft, ArrowRight, Plane, ChevronDown, AlertCircle } from 'lucide-react'
 import { BookingFormData } from '../types'
-import { uaeEmirates, getCitiesForEmirate, getDistrictsForCity } from '../data/uaeLocations'
 
 interface Step1Props {
   onNext: (senderData: Partial<BookingFormData>) => void
@@ -16,10 +15,15 @@ export default function Step1BookingForm({ onNext, onBack, initialData, service 
     defaultValues: initialData || {}
   })
 
+  // Determine route
+  const route = (service || initialData?.service || 'uae-to-pinas').toLowerCase()
+  const isPhToUae = route === 'ph-to-uae'
+  const routeDisplay = isPhToUae ? 'PHILIPPINES TO UAE' : 'UAE TO PHILIPPINES'
+
   // Local state for new fields
   const [firstName, setFirstName] = useState('')
   const [lastName, setLastName] = useState('')
-  const [country, setCountry] = useState('UNITED ARAB EMIRATES')
+  const [country, setCountry] = useState(isPhToUae ? 'PHILIPPINES' : 'UNITED ARAB EMIRATES')
   const [emirates, setEmirates] = useState('')
   const [city, setCity] = useState('')
   const [district, setDistrict] = useState('')
@@ -35,15 +39,6 @@ export default function Step1BookingForm({ onNext, onBack, initialData, service 
   const [touched, setTouched] = useState<Record<string, boolean>>({})
   const [validationErrors, setValidationErrors] = useState<Record<string, string>>({})
 
-  // Determine route
-  const route = (service || initialData?.service || 'uae-to-pinas').toLowerCase()
-  const isPhToUae = route === 'ph-to-uae'
-  const routeDisplay = isPhToUae ? 'PHILIPPINES TO UAE' : 'UAE TO PHILIPPINES'
-
-  // Get available cities and districts based on selected emirates
-  const availableCities = emirates ? getCitiesForEmirate(emirates) : []
-  const availableDistricts = (emirates && city) ? getDistrictsForCity(emirates, city) : []
-
   // Validate field
   const validateField = (name: string, value: string) => {
     if (!value || value.trim() === '') {
@@ -51,13 +46,17 @@ export default function Step1BookingForm({ onNext, onBack, initialData, service 
       return false
     }
     
-    // Email validation
+    // Email validation (only if value is provided - field is optional)
     if (name === 'emailAddress') {
-      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
-      if (!emailRegex.test(value.trim())) {
-        setValidationErrors(prev => ({ ...prev, [name]: 'Please enter a valid email address' }))
-        return false
+      if (value && value.trim() !== '') {
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+        if (!emailRegex.test(value.trim())) {
+          setValidationErrors(prev => ({ ...prev, [name]: 'Please enter a valid email address' }))
+          return false
+        }
       }
+      // Email is optional, so if empty, it's valid
+      return true
     }
     
     // Phone number validation
@@ -95,6 +94,23 @@ export default function Step1BookingForm({ onNext, onBack, initialData, service 
       }
     }
     
+    // Last name validation
+    if (name === 'lastName') {
+      const nameValue = value.trim()
+      if (nameValue.length < 2) {
+        setValidationErrors(prev => ({ ...prev, [name]: 'Last name must be at least 2 characters' }))
+        return false
+      }
+      if (nameValue.length > 50) {
+        setValidationErrors(prev => ({ ...prev, [name]: 'Last name must be less than 50 characters' }))
+        return false
+      }
+      if (!/^[a-zA-Z\s]+$/.test(nameValue)) {
+        setValidationErrors(prev => ({ ...prev, [name]: 'Last name can only contain letters and spaces' }))
+        return false
+      }
+    }
+    
     setValidationErrors(prev => {
       const newErrors = { ...prev }
       delete newErrors[name]
@@ -108,6 +124,17 @@ export default function Step1BookingForm({ onNext, onBack, initialData, service 
     setTouched(prev => ({ ...prev, [name]: true }))
     validateField(name, value)
   }
+
+  // Update country when route changes
+  useEffect(() => {
+    setCountry(isPhToUae ? 'PHILIPPINES' : 'UNITED ARAB EMIRATES')
+    // Also update dial code based on route
+    if (isPhToUae) {
+      setDialCode('+63')
+    } else {
+      setDialCode('+971')
+    }
+  }, [isPhToUae])
 
   useEffect(() => {
     if (initialData?.sender) {
@@ -141,19 +168,22 @@ export default function Step1BookingForm({ onNext, onBack, initialData, service 
       if (initialData.sender.deliveryOption) {
         setSenderDeliveryOption(initialData.sender.deliveryOption)
       }
+      // Set country from initialData if it exists, otherwise use route-based default
+      if (initialData.sender.country) {
+        setCountry(initialData.sender.country)
+      } else {
+        setCountry(isPhToUae ? 'PHILIPPINES' : 'UNITED ARAB EMIRATES')
+      }
     }
-  }, [initialData])
+  }, [initialData, isPhToUae])
 
 
   const onSubmit = (data: BookingFormData) => {
     // Validate all required fields
     const fieldValidations = [
       { name: 'firstName', value: firstName },
-      { name: 'emirates', value: emirates },
-      { name: 'city', value: city },
-      { name: 'district', value: district },
-      { name: 'phoneNumber', value: phoneNumber },
-      { name: 'emailAddress', value: emailAddress }
+      { name: 'lastName', value: lastName },
+      { name: 'phoneNumber', value: phoneNumber }
     ]
 
     let isValid = true
@@ -163,6 +193,14 @@ export default function Step1BookingForm({ onNext, onBack, initialData, service 
         isValid = false
       }
     })
+    
+    // Validate email if provided (optional field)
+    if (emailAddress && emailAddress.trim() !== '') {
+      setTouched(prev => ({ ...prev, emailAddress: true }))
+      if (!validateField('emailAddress', emailAddress)) {
+        isValid = false
+      }
+    }
 
     if (!isValid) {
       return
@@ -171,14 +209,8 @@ export default function Step1BookingForm({ onNext, onBack, initialData, service 
     // Combine firstName and lastName
     const fullName = `${firstName} ${lastName}`.trim()
     
-    // Build complete address
-    const addressParts = []
-    if (addressLine1) addressParts.push(addressLine1)
-    if (landmark) addressParts.push(`Landmark: ${landmark}`)
-    if (district) addressParts.push(district)
-    if (city) addressParts.push(city)
-    if (emirates) addressParts.push(emirates)
-    const completeAddress = addressParts.join(', ')
+    // Build complete address (just use addressLine1)
+    const completeAddress = addressLine1 || ''
 
     // Combine dialCode and phoneNumber
     const contactNo = `${dialCode}${phoneNumber}`
@@ -190,7 +222,7 @@ export default function Step1BookingForm({ onNext, onBack, initialData, service 
         firstName,
         lastName,
         completeAddress,
-        country: country || 'UNITED ARAB EMIRATES',
+        country: country || (isPhToUae ? 'PHILIPPINES' : 'UNITED ARAB EMIRATES'),
         emirates,
         city,
         district,
@@ -213,32 +245,33 @@ export default function Step1BookingForm({ onNext, onBack, initialData, service 
   return (
     <div className="space-y-6">
       {/* Sub-Header with Route Badge */}
-      <div className="bg-white border-b border-gray-200">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-          <div className="flex items-center justify-between">
+      <div className="bg-white border-b border-gray-200 sticky top-0 z-10">
+        <div className="max-w-7xl mx-auto px-3 sm:px-4 lg:px-8 py-3 sm:py-4">
+          <div className="flex items-center justify-between gap-2">
             <button
               onClick={onBack}
-              className="flex items-center gap-2 text-gray-700 hover:text-gray-900 transition-colors"
+              className="flex items-center gap-1 sm:gap-2 text-gray-700 hover:text-gray-900 transition-colors min-h-[44px] px-2 sm:px-0"
+              aria-label="Go back"
             >
-              <ArrowLeft className="w-5 h-5" />
-              <span>Back</span>
+              <ArrowLeft className="w-5 h-5 flex-shrink-0" />
+              <span className="hidden sm:inline">Back</span>
             </button>
-            <div className="flex-1 flex justify-center">
-              <div className="flex items-center gap-2 bg-green-600 text-white px-4 py-2 rounded-full">
-                <span className="text-sm font-semibold">{routeDisplay}</span>
-                <Plane className="w-4 h-4" />
+            <div className="flex-1 flex justify-center min-w-0">
+              <div className="flex items-center gap-1.5 sm:gap-2 bg-green-600 text-white px-2 sm:px-4 py-1.5 sm:py-2 rounded-full">
+                <span className="text-xs sm:text-sm font-semibold truncate">{routeDisplay}</span>
+                <Plane className="w-3.5 h-3.5 sm:w-4 sm:h-4 flex-shrink-0" />
               </div>
             </div>
-            <div className="text-sm text-gray-600 font-medium">
-              Step 3 of 7: Sender Details
+            <div className="text-xs sm:text-sm text-gray-600 font-medium hidden xs:block whitespace-nowrap">
+              Step 2 of 6
             </div>
           </div>
         </div>
       </div>
 
       {/* Main Form Content */}
-      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 pb-8">
-        <form onSubmit={handleSubmit(onSubmit)} className="bg-white rounded-lg shadow-lg p-4 sm:p-6 lg:p-8 space-y-6 sm:space-y-8">
+      <div className="max-w-4xl mx-auto px-3 sm:px-4 lg:px-8 pb-6 sm:pb-8">
+        <form onSubmit={handleSubmit(onSubmit)} className="bg-white rounded-lg shadow-lg p-4 sm:p-6 lg:p-8 space-y-5 sm:space-y-6 lg:space-y-8">
           {/* Title Section */}
           <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
             <div>
@@ -249,9 +282,9 @@ export default function Step1BookingForm({ onNext, onBack, initialData, service 
           </div>
 
           {/* Personal Information */}
-          <div className="space-y-4">
-            <h2 className="text-lg font-semibold text-gray-800">Personal Information</h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="space-y-3 sm:space-y-4">
+            <h2 className="text-base sm:text-lg font-semibold text-gray-800">Personal Information</h2>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   First Name <span className="text-red-500">*</span>
@@ -268,7 +301,7 @@ export default function Step1BookingForm({ onNext, onBack, initialData, service 
                     }
                   }}
                   onBlur={() => handleBlur('firstName', firstName)}
-                  className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:border-transparent transition-all text-base ${
+                  className={`w-full px-3 sm:px-4 py-2.5 sm:py-3 border rounded-lg focus:ring-2 focus:border-transparent transition-all text-base min-h-[44px] ${
                     touched.firstName && validationErrors.firstName
                       ? 'border-red-500 focus:ring-red-500'
                       : 'border-gray-300 focus:ring-green-500'
@@ -287,7 +320,7 @@ export default function Step1BookingForm({ onNext, onBack, initialData, service 
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Last Name
+                  Last Name <span className="text-red-500">*</span>
                 </label>
                 <input
                   type="text"
@@ -296,19 +329,34 @@ export default function Step1BookingForm({ onNext, onBack, initialData, service 
                     // Only allow letters and spaces
                     const value = e.target.value.replace(/[^a-zA-Z\s]/g, '')
                     setLastName(value)
+                    if (touched.lastName) {
+                      validateField('lastName', value)
+                    }
                   }}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all text-base"
-                  placeholder="Enter your last name (optional)"
+                  onBlur={() => handleBlur('lastName', lastName)}
+                  className={`w-full px-3 sm:px-4 py-2.5 sm:py-3 border rounded-lg focus:ring-2 focus:border-transparent transition-all text-base min-h-[44px] ${
+                    touched.lastName && validationErrors.lastName
+                      ? 'border-red-500 focus:ring-red-500'
+                      : 'border-gray-300 focus:ring-green-500'
+                  }`}
+                  placeholder="Enter your last name"
+                  required
                   maxLength={50}
                 />
-                <p className="mt-1 text-xs text-gray-500">Optional: Letters only</p>
+                <p className="mt-1 text-xs text-gray-500">Format: Letters only, 2-50 characters</p>
+                {touched.lastName && validationErrors.lastName && (
+                  <div className="flex items-center gap-1 mt-1 text-red-500 text-sm">
+                    <AlertCircle className="w-4 h-4" />
+                    <span>{validationErrors.lastName}</span>
+                  </div>
+                )}
               </div>
             </div>
           </div>
 
           {/* Address Information */}
-          <div className="space-y-4">
-            <h2 className="text-lg font-semibold text-gray-800">Address Information</h2>
+          <div className="space-y-3 sm:space-y-4">
+            <h2 className="text-base sm:text-lg font-semibold text-gray-800">Address Information</h2>
             
             {/* Country */}
             <div>
@@ -316,136 +364,20 @@ export default function Step1BookingForm({ onNext, onBack, initialData, service 
                 Country <span className="text-red-500">*</span>
               </label>
               <div className="relative">
-                <div className="absolute left-3 top-1/2 transform -translate-y-1/2 w-6 h-4 bg-gradient-to-r from-red-500 via-green-500 to-black rounded z-10"></div>
+                <div className={`absolute left-3 top-1/2 transform -translate-y-1/2 w-6 h-4 rounded z-10 ${
+                  isPhToUae ? 'bg-red-600' : 'bg-gradient-to-r from-red-500 via-green-500 to-black'
+                }`}></div>
                 <select
                   value={country}
                   onChange={(e) => setCountry(e.target.value)}
-                  className="w-full pl-12 pr-10 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent appearance-none bg-white text-gray-700"
+                  className="w-full pl-10 sm:pl-12 pr-8 sm:pr-10 py-2.5 sm:py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent appearance-none bg-white text-gray-700 text-base min-h-[44px]"
                   required
                 >
-                  <option value="UNITED ARAB EMIRATES">UNITED ARAB EMIRATES</option>
+                  <option value={isPhToUae ? 'PHILIPPINES' : 'UNITED ARAB EMIRATES'}>
+                    {isPhToUae ? 'PHILIPPINES' : 'UNITED ARAB EMIRATES'}
+                  </option>
                 </select>
                 <ChevronDown className="absolute right-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400 pointer-events-none z-10" />
-              </div>
-            </div>
-
-            {/* Emirates, City, District */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Emirates <span className="text-red-500">*</span>
-                </label>
-                <div className="relative">
-                  <MapPin className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
-                  <select
-                    value={emirates}
-                    onChange={(e) => {
-                      setEmirates(e.target.value)
-                      setCity('')
-                      setDistrict('')
-                      if (touched.emirates) {
-                        validateField('emirates', e.target.value)
-                      }
-                    }}
-                    onBlur={() => handleBlur('emirates', emirates)}
-                    className={`w-full pl-10 pr-10 py-3 border rounded-lg focus:ring-2 focus:border-transparent appearance-none bg-white text-gray-700 text-base ${
-                      touched.emirates && validationErrors.emirates
-                        ? 'border-red-500 focus:ring-red-500'
-                        : 'border-gray-300 focus:ring-green-500'
-                    }`}
-                    required
-                  >
-                    <option value="">Select Emirates</option>
-                    {uaeEmirates.map((em) => (
-                      <option key={em} value={em}>{em}</option>
-                    ))}
-                  </select>
-                  <ChevronDown className="absolute right-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400 pointer-events-none z-10" />
-                </div>
-                <p className="mt-1 text-xs text-gray-500">Required: Select your emirate</p>
-                {touched.emirates && validationErrors.emirates && (
-                  <div className="flex items-center gap-1 mt-1 text-red-500 text-sm">
-                    <AlertCircle className="w-4 h-4" />
-                    <span>{validationErrors.emirates}</span>
-                  </div>
-                )}
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  City <span className="text-red-500">*</span>
-                </label>
-                <div className="relative">
-                  <MapPin className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400 z-10" />
-                  <select
-                    value={city}
-                    onChange={(e) => {
-                      setCity(e.target.value)
-                      setDistrict('')
-                      if (touched.city) {
-                        validateField('city', e.target.value)
-                      }
-                    }}
-                    onBlur={() => handleBlur('city', city)}
-                    className={`w-full pl-10 pr-10 py-3 border rounded-lg focus:ring-2 focus:border-transparent appearance-none bg-white text-gray-700 text-base ${
-                      touched.city && validationErrors.city
-                        ? 'border-red-500 focus:ring-red-500'
-                        : 'border-gray-300 focus:ring-green-500'
-                    }`}
-                    disabled={!emirates}
-                    required
-                  >
-                    <option value="">Select City</option>
-                    {availableCities.map((c) => (
-                      <option key={c} value={c}>{c}</option>
-                    ))}
-                  </select>
-                  <ChevronDown className="absolute right-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400 pointer-events-none z-10" />
-                </div>
-                <p className="mt-1 text-xs text-gray-500">Required: Select your city</p>
-                {touched.city && validationErrors.city && (
-                  <div className="flex items-center gap-1 mt-1 text-red-500 text-sm">
-                    <AlertCircle className="w-4 h-4" />
-                    <span>{validationErrors.city}</span>
-                  </div>
-                )}
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  District <span className="text-red-500">*</span>
-                </label>
-                <div className="relative">
-                  <MapPin className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400 z-10" />
-                  <select
-                    value={district}
-                    onChange={(e) => {
-                      setDistrict(e.target.value)
-                      if (touched.district) {
-                        validateField('district', e.target.value)
-                      }
-                    }}
-                    onBlur={() => handleBlur('district', district)}
-                    className={`w-full pl-10 pr-10 py-3 border rounded-lg focus:ring-2 focus:border-transparent appearance-none bg-white text-gray-700 text-base ${
-                      touched.district && validationErrors.district
-                        ? 'border-red-500 focus:ring-red-500'
-                        : 'border-gray-300 focus:ring-green-500'
-                    }`}
-                    disabled={!city}
-                    required
-                  >
-                    <option value="">Select District</option>
-                    {availableDistricts.map((d) => (
-                      <option key={d} value={d}>{d}</option>
-                    ))}
-                  </select>
-                  <ChevronDown className="absolute right-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400 pointer-events-none z-10" />
-                </div>
-                <p className="mt-1 text-xs text-gray-500">Required: Select your district</p>
-                {touched.district && validationErrors.district && (
-                  <div className="flex items-center gap-1 mt-1 text-red-500 text-sm">
-                    <AlertCircle className="w-4 h-4" />
-                    <span>{validationErrors.district}</span>
-                  </div>
-                )}
               </div>
             </div>
 
@@ -458,33 +390,17 @@ export default function Step1BookingForm({ onNext, onBack, initialData, service 
                 type="text"
                 value={addressLine1}
                 onChange={(e) => setAddressLine1(e.target.value)}
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all text-base"
+                className="w-full px-3 sm:px-4 py-2.5 sm:py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all text-base min-h-[44px]"
                 placeholder="Flat/Villa No., Building, Street & Area"
                 maxLength={200}
               />
               <p className="mt-1 text-xs text-gray-500">Optional: Detailed address information (max 200 characters)</p>
             </div>
-
-            {/* Landmark */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Landmark
-              </label>
-              <input
-                type="text"
-                value={landmark}
-                onChange={(e) => setLandmark(e.target.value)}
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all text-base"
-                placeholder="Nearby landmark or reference point"
-                maxLength={100}
-              />
-              <p className="mt-1 text-xs text-gray-500">Optional: Nearby landmarks for easier location (max 100 characters)</p>
-            </div>
           </div>
 
           {/* Delivery/Pickup Options */}
-          <div className="space-y-4">
-            <h2 className="text-lg font-semibold text-gray-800">Delivery Options</h2>
+          <div className="space-y-3 sm:space-y-4">
+            <h2 className="text-base sm:text-lg font-semibold text-gray-800">Delivery Options</h2>
             <div className="space-y-3">
               <label className="flex items-start sm:items-center gap-3 p-3 sm:p-4 border-2 rounded-lg cursor-pointer transition-all hover:bg-gray-50 active:bg-gray-100">
                 <input
@@ -519,26 +435,36 @@ export default function Step1BookingForm({ onNext, onBack, initialData, service 
           </div>
 
           {/* Contact Information */}
-          <div className="space-y-4">
-            <h2 className="text-lg font-semibold text-gray-800">Contact Information</h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="space-y-3 sm:space-y-4">
+            <h2 className="text-base sm:text-lg font-semibold text-gray-800">Contact Information</h2>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Dial Code <span className="text-red-500">*</span>
                 </label>
                 <div className="relative">
-                  <div className="absolute left-3 top-1/2 transform -translate-y-1/2 w-6 h-4 bg-gradient-to-r from-red-500 via-green-500 to-black rounded z-10"></div>
+                  <div className={`absolute left-3 top-1/2 transform -translate-y-1/2 w-6 h-4 rounded z-10 ${
+                    isPhToUae ? 'bg-red-600' : 'bg-gradient-to-r from-red-500 via-green-500 to-black'
+                  }`}></div>
                   <select
                     value={dialCode}
                     onChange={(e) => setDialCode(e.target.value)}
-                    className="w-full pl-12 pr-10 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent appearance-none bg-white text-gray-700"
+                    disabled={isPhToUae}
+                    className={`w-full pl-10 sm:pl-12 pr-8 sm:pr-10 py-2.5 sm:py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent appearance-none bg-white text-gray-700 text-base min-h-[44px] ${
+                      isPhToUae ? 'bg-gray-100 cursor-not-allowed' : ''
+                    }`}
                     required
                   >
                     <option value="+971">+971</option>
                     <option value="+63">+63</option>
                   </select>
-                  <ChevronDown className="absolute right-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400 pointer-events-none z-10" />
+                  <ChevronDown className={`absolute right-3 top-1/2 transform -translate-y-1/2 w-5 h-5 pointer-events-none z-10 ${
+                    isPhToUae ? 'text-gray-300' : 'text-gray-400'
+                  }`} />
                 </div>
+                {isPhToUae && (
+                  <p className="mt-1 text-xs text-gray-500">Dial code is fixed for Philippines</p>
+                )}
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -556,7 +482,7 @@ export default function Step1BookingForm({ onNext, onBack, initialData, service 
                     }
                   }}
                   onBlur={() => handleBlur('phoneNumber', phoneNumber)}
-                  className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:border-transparent transition-all text-base ${
+                  className={`w-full px-3 sm:px-4 py-2.5 sm:py-3 border rounded-lg focus:ring-2 focus:border-transparent transition-all text-base min-h-[44px] ${
                     touched.phoneNumber && validationErrors.phoneNumber
                       ? 'border-red-500 focus:ring-red-500'
                       : 'border-gray-300 focus:ring-green-500'
@@ -578,7 +504,7 @@ export default function Step1BookingForm({ onNext, onBack, initialData, service 
             {/* Email Address */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
-                Email Address <span className="text-red-500">*</span>
+                Email Address
               </label>
               <input
                 type="email"
@@ -590,15 +516,14 @@ export default function Step1BookingForm({ onNext, onBack, initialData, service 
                   }
                 }}
                 onBlur={() => handleBlur('emailAddress', emailAddress)}
-                className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:border-transparent transition-all text-base ${
+                className={`w-full px-3 sm:px-4 py-2.5 sm:py-3 border rounded-lg focus:ring-2 focus:border-transparent transition-all text-base min-h-[44px] ${
                   touched.emailAddress && validationErrors.emailAddress
                     ? 'border-red-500 focus:ring-red-500'
                     : 'border-gray-300 focus:ring-green-500'
                 }`}
-                placeholder="your.email@example.com"
-                required
+                placeholder="your.email@example.com (optional)"
               />
-              <p className="mt-1 text-xs text-gray-500">Format: valid email address (e.g., name@domain.com)</p>
+              <p className="mt-1 text-xs text-gray-500">Optional: Valid email address (e.g., name@domain.com)</p>
               {touched.emailAddress && validationErrors.emailAddress && (
                 <div className="flex items-center gap-1 mt-1 text-red-500 text-sm">
                   <AlertCircle className="w-4 h-4" />
@@ -616,7 +541,7 @@ export default function Step1BookingForm({ onNext, onBack, initialData, service 
                 type="text"
                 value={agentName}
                 onChange={(e) => setAgentName(e.target.value)}
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all text-base"
+                className="w-full px-3 sm:px-4 py-2.5 sm:py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all text-base min-h-[44px]"
                 placeholder="Agent or representative name"
               />
               <p className="mt-1 text-xs text-gray-500">Optional: Name of agent or representative if applicable</p>
@@ -624,13 +549,13 @@ export default function Step1BookingForm({ onNext, onBack, initialData, service 
           </div>
 
           {/* Next Step Button */}
-          <div className="flex flex-col sm:flex-row justify-end gap-3 pt-4">
+          <div className="flex flex-col sm:flex-row justify-end gap-3 pt-4 sm:pt-6">
             <button
               type="submit"
-              className="flex items-center justify-center gap-2 bg-green-700 text-white px-6 sm:px-8 py-3 rounded-lg font-semibold hover:bg-green-800 transition-colors text-base sm:text-lg w-full sm:w-auto"
+              className="flex items-center justify-center gap-2 bg-green-700 text-white px-6 sm:px-8 py-3 sm:py-3.5 rounded-lg font-semibold hover:bg-green-800 active:bg-green-900 transition-colors text-base sm:text-lg w-full sm:w-auto min-h-[48px] shadow-md hover:shadow-lg"
             >
               <span>Next Step</span>
-              <ArrowRight className="w-5 h-5" />
+              <ArrowRight className="w-5 h-5 flex-shrink-0" />
             </button>
           </div>
         </form>
