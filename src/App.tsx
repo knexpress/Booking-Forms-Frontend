@@ -106,6 +106,18 @@ function App() {
     console.log('📦 Submitting Booking Data:', finalData)
     console.log('🌐 API Base URL:', API_CONFIG.baseUrl)
     
+    // Check if API URL is configured correctly
+    if (API_CONFIG.baseUrl === 'http://localhost:5000' && window.location.hostname !== 'localhost') {
+      console.error('❌ API URL not configured! Using default localhost in production.')
+      setIsLoading(false)
+      showToast({
+        type: 'error',
+        message: 'API configuration error. Please set VITE_API_BASE_URL environment variable.',
+        duration: 5000,
+      })
+      return
+    }
+    
     try {
       // Call API endpoint to save booking
       const apiUrl = `${API_CONFIG.baseUrl}/api/bookings`
