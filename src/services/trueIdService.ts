@@ -122,8 +122,8 @@ export async function validateWithTrueID(
  * This is for Step 2 when we only have ID images
  */
 export async function validateEmiratesID(
-  idFrontBase64: string,
-  idBackBase64?: string
+  _idFrontBase64: string,
+  _idBackBase64?: string
 ): Promise<TrueIDResponse> {
   try {
     console.log('📇 TRUE-ID: Validating Emirates ID...')
@@ -157,7 +157,7 @@ export async function validateEmiratesID(
  */
 export async function checkTrueIDAvailability(): Promise<boolean> {
   try {
-    const response = await fetch(`${TRUE_ID_API_URL}/docs`, {
+    const response = await fetch(`${BACKEND_API_URL}/api/validate-identity/health`, {
       method: 'HEAD',
       signal: AbortSignal.timeout(5000),
     })

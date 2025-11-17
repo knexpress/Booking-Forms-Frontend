@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { ArrowLeft, ArrowRight, Package, Grid3x3, Plus, Trash2, Info } from 'lucide-react'
 import { BookingFormData, ItemDeclaration } from '../types'
 
@@ -229,7 +229,7 @@ export default function CommoditiesDeclaration({ onNext, onBack, initialData, se
 
             {/* Item Rows */}
             <div className="space-y-3 border-x border-b border-gray-200 rounded-b-lg p-3 sm:p-4">
-              {items.map((item, index) => (
+              {items.map((item) => (
                 <div key={item.id} className="flex flex-row items-start gap-2 sm:gap-3 lg:gap-4">
                   <div className="flex-1 min-w-0">
                     <input

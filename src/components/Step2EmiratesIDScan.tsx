@@ -12,7 +12,6 @@ import {
   cropDocument,
   imageToMat,
   matToBase64,
-  calculateBlurScore,
 } from '../services/opencvService'
 import IDScanModal from './IDScanModal'
 
@@ -44,17 +43,17 @@ export default function Step2EmiratesIDScan({ onComplete, onBack, service }: Ste
   const [philippinesIdBack, setPhilippinesIdBack] = useState<string | null>(null)
   const [isProcessing, setIsProcessing] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [eidData, setEidData] = useState<any>(null)
+  const [_eidData, setEidData] = useState<any>(null)
   const [processingMessage, setProcessingMessage] = useState<string>('Processing Emirates ID data...')
   const [cameraError, setCameraError] = useState<string | null>(null)
-  const [showFileUpload, setShowFileUpload] = useState(false)
+  const [_showFileUpload, setShowFileUpload] = useState(false)
   
   // Auto-detection state
   const [opencvLoaded, setOpencvLoaded] = useState(false)
   const [isDetecting, setIsDetecting] = useState(false)
   const [detectionReady, setDetectionReady] = useState(false)
   const [detectedPoints, setDetectedPoints] = useState<any[] | null>(null)
-  const [stabilityStartTime, setStabilityStartTime] = useState<number | null>(null)
+  const [_stabilityStartTime, setStabilityStartTime] = useState<number | null>(null)
   const [lastBlurScore, setLastBlurScore] = useState<number>(0)
   const [modalOpen, setModalOpen] = useState(false)
   const [modalSide, setModalSide] = useState<ScanSide>(null)
@@ -566,7 +565,6 @@ export default function Step2EmiratesIDScan({ onComplete, onBack, service }: Ste
               }
             } else {
               // Still counting down - show progress but don't set ready yet
-              const progress = Math.min(100, (stableDuration / STABILITY_DURATION) * 100)
               setDetectionReady(false)
             }
           } else {
@@ -644,7 +642,7 @@ export default function Step2EmiratesIDScan({ onComplete, onBack, service }: Ste
     
     if (typeof error === 'string') {
       errorMessage = error
-    } else if (error instanceof Error || error instanceof DOMException) {
+    } else if (error instanceof Error || (typeof DOMException !== 'undefined' && (error as any) instanceof DOMException)) {
       errorMessage = error.message || 'Camera access error'
     }
     
@@ -688,12 +686,15 @@ export default function Step2EmiratesIDScan({ onComplete, onBack, service }: Ste
           if (points && points.length >= 4) {
             console.log('✅ Document detected in uploaded image, cropping...')
             const croppedMat = cropDocument(videoMat, points, 800, 500)
-            croppedImage = matToBase64(croppedMat)
-            console.log('✅ ID card frame cropped successfully from uploaded image')
+            const croppedBase64 = croppedMat ? matToBase64(croppedMat) : null
+            if (croppedBase64) {
+              croppedImage = croppedBase64
+              console.log('✅ ID card frame cropped successfully from uploaded image')
+            }
             
             // Clean up
             videoMat.delete()
-            croppedMat.delete()
+            if (croppedMat) croppedMat.delete()
           } else {
             console.warn('⚠️ Could not detect document in uploaded image, using full image')
           }
@@ -750,7 +751,9 @@ export default function Step2EmiratesIDScan({ onComplete, onBack, service }: Ste
     reader.readAsDataURL(file)
   }
 
-  const captureImage = useCallback(async () => {
+  // Unused - kept for potential future use
+  /*
+  const _captureImage = useCallback(async () => {
     console.log('📸 Capture button clicked, currentSide:', currentSide)
     if (webcamRef.current) {
       // Small delay to ensure camera is ready
@@ -843,6 +846,7 @@ export default function Step2EmiratesIDScan({ onComplete, onBack, service }: Ste
       }
     }
   }, [currentSide])
+  */
 
   const retake = (side: 'front' | 'back') => {
     stopAutoDetection()
@@ -1138,7 +1142,7 @@ export default function Step2EmiratesIDScan({ onComplete, onBack, service }: Ste
                           facingMode: 'environment',
                           aspectRatio: { ideal: 16/9 }
                         }}
-                        onUserMedia={(stream) => {
+                        onUserMedia={(_stream) => {
                           console.log('✅ Front camera loaded in modal')
                           setCameraError(null)
                           setError(null)
@@ -1383,7 +1387,7 @@ export default function Step2EmiratesIDScan({ onComplete, onBack, service }: Ste
                           facingMode: 'environment',
                           aspectRatio: { ideal: 16/9 }
                         }}
-                        onUserMedia={(stream) => {
+                        onUserMedia={(_stream) => {
                           console.log('✅ Back camera loaded in modal')
                           setCameraError(null)
                           setError(null)

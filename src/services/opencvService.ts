@@ -73,7 +73,6 @@ export async function loadOpenCV(): Promise<void> {
       'https://cdn.jsdelivr.net/gh/opencv/opencv@4.8.0/platforms/js/opencv.js'
     ];
 
-    let sourceIndex = 0;
     const maxChecks = 150; // 15 seconds timeout per source
 
     const loadFromSource = (index: number) => {
@@ -588,8 +587,8 @@ export async function imageToMat(imageSrc: string | HTMLImageElement | HTMLVideo
 
     // Create canvas to get image data
     const canvas = document.createElement('canvas');
-    canvas.width = img.videoWidth || img.width;
-    canvas.height = img.videoHeight || img.height;
+    canvas.width = (img instanceof HTMLVideoElement ? img.videoWidth : img.width) || img.width;
+    canvas.height = (img instanceof HTMLVideoElement ? img.videoHeight : img.height) || img.height;
 
     const ctx = canvas.getContext('2d');
     if (!ctx) {

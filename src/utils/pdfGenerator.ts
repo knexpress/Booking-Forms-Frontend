@@ -162,7 +162,7 @@ export async function generateBookingPDF(data: BookingPDFData, options?: { openI
 
   // Helper function to add image to PDF
   const addImageToPDF = (imageData: string, label: string): Promise<void> => {
-    return new Promise((resolve, reject) => {
+    return new Promise((resolve) => {
       try {
         checkNewPage(80)
         doc.setFontSize(10)

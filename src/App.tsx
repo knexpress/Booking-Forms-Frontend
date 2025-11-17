@@ -122,7 +122,7 @@ function App() {
         console.log('   Booking ID:', result.bookingId)
         
         // Show success toast with print option
-        const toastId = showToast({
+        showToast({
           type: 'success',
           message: 'Thank you! Your booking has been successfully submitted.',
           referenceNumber: result.referenceNumber,
@@ -133,7 +133,10 @@ function App() {
                 bookingId: result.bookingId,
                 service: selectedService || 'uae-to-pinas',
                 sender: finalData.sender,
-                receiver: finalData.receiver,
+                receiver: {
+                  ...finalData.receiver,
+                  deliveryOption: finalData.receiver.deliveryOption === 'pickup' ? 'warehouse' : 'address',
+                },
                 items: finalData.items,
                 eidFrontImage: verificationData.eidFrontImage,
                 eidBackImage: verificationData.eidBackImage,

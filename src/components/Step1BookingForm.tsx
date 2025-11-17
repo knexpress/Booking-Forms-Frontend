@@ -11,7 +11,7 @@ interface Step1Props {
 }
 
 export default function Step1BookingForm({ onNext, onBack, initialData, service }: Step1Props) {
-  const { register, handleSubmit, formState: { errors }, setValue, watch } = useForm<BookingFormData>({
+  const { handleSubmit } = useForm<BookingFormData>({
     defaultValues: initialData || {}
   })
 
@@ -24,11 +24,11 @@ export default function Step1BookingForm({ onNext, onBack, initialData, service 
   const [firstName, setFirstName] = useState('')
   const [lastName, setLastName] = useState('')
   const [country, setCountry] = useState(isPhToUae ? 'PHILIPPINES' : 'UNITED ARAB EMIRATES')
-  const [emirates, setEmirates] = useState('')
-  const [city, setCity] = useState('')
-  const [district, setDistrict] = useState('')
+  const [emirates, _setEmirates] = useState('')
+  const [city, _setCity] = useState('')
+  const [district, _setDistrict] = useState('')
   const [addressLine1, setAddressLine1] = useState('')
-  const [landmark, setLandmark] = useState('')
+  const [landmark, _setLandmark] = useState('')
   const [dialCode, setDialCode] = useState('+971')
   const [phoneNumber, setPhoneNumber] = useState('')
   const [emailAddress, setEmailAddress] = useState('')
@@ -178,7 +178,7 @@ export default function Step1BookingForm({ onNext, onBack, initialData, service 
   }, [initialData, isPhToUae])
 
 
-  const onSubmit = (data: BookingFormData) => {
+  const onSubmit = (_data: BookingFormData) => {
     // Validate all required fields
     const fieldValidations = [
       { name: 'firstName', value: firstName },

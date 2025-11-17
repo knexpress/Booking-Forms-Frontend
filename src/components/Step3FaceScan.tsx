@@ -1,6 +1,6 @@
 import { useState, useRef, useCallback, useEffect } from 'react'
 import Webcam from 'react-webcam'
-import { Camera, CheckCircle, XCircle, ArrowLeft, ArrowRight, Eye, Maximize2, Smile, RotateCw } from 'lucide-react'
+import { Camera, CheckCircle, XCircle, ArrowLeft, ArrowRight, Eye, Maximize2 } from 'lucide-react'
 import { VerificationData } from '../types'
 import { verifyFace, detectLiveness } from '../services/faceRecognitionService'
 import { validateWithTrueID, getTrueIDStatusMessage } from '../services/trueIdService'
@@ -47,15 +47,15 @@ export default function Step3FaceScan({ onComplete, onBack, eidImage, eidBackIma
   const [completedActions, setCompletedActions] = useState<LivenessAction[]>([])
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState(false)
-  const [verificationResult, setVerificationResult] = useState<any>(null)
-  const [livenessResult, setLivenessResult] = useState<any>(null)
+  const [_verificationResult, setVerificationResult] = useState<any>(null)
+  const [_livenessResult, setLivenessResult] = useState<any>(null)
   const [cameraError, setCameraError] = useState<string | null>(null)
   const [modalOpen, setModalOpen] = useState(false)
   const [faceModelsLoaded, setFaceModelsLoaded] = useState(false)
   const [faceDetection, setFaceDetection] = useState<FaceDetectionResult | null>(null)
   const [isDetecting, setIsDetecting] = useState(false)
   const [detectionReady, setDetectionReady] = useState(false)
-  const [stabilityStartTime, setStabilityStartTime] = useState<number | null>(null)
+  const [_stabilityStartTime, setStabilityStartTime] = useState<number | null>(null)
   
   // Detect if device is mobile
   const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent) || window.innerWidth < 768
@@ -314,7 +314,7 @@ export default function Step3FaceScan({ onComplete, onBack, eidImage, eidBackIma
     
     if (typeof error === 'string') {
       errorMessage = error
-    } else if (error instanceof Error || error instanceof DOMException) {
+    } else if (error instanceof Error || (typeof DOMException !== 'undefined' && (error as any) instanceof DOMException)) {
       errorMessage = error.message || 'Camera access error'
     }
     
@@ -323,6 +323,8 @@ export default function Step3FaceScan({ onComplete, onBack, eidImage, eidBackIma
   }
 
 
+  // Unused - kept for potential future use
+  /*
   const captureImageForAction = useCallback(() => {
     if (webcamRef.current && currentAction) {
       const imageSrc = webcamRef.current.getScreenshot()
@@ -339,7 +341,9 @@ export default function Step3FaceScan({ onComplete, onBack, eidImage, eidBackIma
     }
   }, [currentAction])
 
-  const simulateActionCompletion = useCallback(() => {
+  // Unused - kept for potential future use
+  /*
+  const _simulateActionCompletion = useCallback(() => {
     if (currentAction && !completedActions.includes(currentAction)) {
       // Capture image before marking action as complete
       captureImageForAction()
@@ -353,6 +357,7 @@ export default function Step3FaceScan({ onComplete, onBack, eidImage, eidBackIma
       })
     }
   }, [currentAction, completedActions, captureImageForAction])
+  */
 
   const performFinalVerification = useCallback(async () => {
     // Use the last captured image (or first if available) for verification
@@ -460,8 +465,6 @@ export default function Step3FaceScan({ onComplete, onBack, eidImage, eidBackIma
           faceImage: faceImages[0] || imageForVerification, // Keep first image for backward compatibility
           faceImages: faceImages.length > 0 ? faceImages : [imageForVerification], // Pass all images
           faceVerified: true,
-          livenessData: livenessResult,
-          faceMatchData: verificationResult,
         })
       }, 2000)
       
@@ -527,8 +530,6 @@ export default function Step3FaceScan({ onComplete, onBack, eidImage, eidBackIma
       onComplete({
         faceImage: faceImage,
         faceVerified: true,
-        livenessData: livenessResult,
-        faceMatchData: verificationResult,
       })
     } else {
       setError('Please complete the face scan verification')
@@ -731,7 +732,7 @@ export default function Step3FaceScan({ onComplete, onBack, eidImage, eidBackIma
                       facingMode: 'user',
                       aspectRatio: { ideal: 16/9 }
                     }}
-                    onUserMedia={(stream) => {
+                    onUserMedia={(_stream) => {
                       console.log('✅ Face camera loaded in modal')
                       setCameraError(null)
                       setError(null)

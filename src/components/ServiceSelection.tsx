@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { ArrowLeft, ArrowRight, Plane, Ship, Camera, Box, Shield, Truck, Home, Clock, Calendar, Hourglass } from 'lucide-react'
+import { ArrowLeft, ArrowRight, Plane, Ship, Camera, Box, Shield, Truck } from 'lucide-react'
 
 interface ServiceSelectionProps {
   onSelectService: (service: string) => void

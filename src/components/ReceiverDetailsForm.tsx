@@ -11,7 +11,7 @@ interface ReceiverDetailsFormProps {
 }
 
 export default function ReceiverDetailsForm({ onNext, onBack, initialData, service }: ReceiverDetailsFormProps) {
-  const { register, handleSubmit, formState: { errors }, setValue, watch } = useForm<BookingFormData>({
+  const { handleSubmit } = useForm<BookingFormData>({
     defaultValues: initialData || {}
   })
 
@@ -24,12 +24,12 @@ export default function ReceiverDetailsForm({ onNext, onBack, initialData, servi
   const [firstName, setFirstName] = useState('')
   const [lastName, setLastName] = useState('')
   const [country, setCountry] = useState(isPhToUae ? 'UNITED ARAB EMIRATES' : 'PHILIPPINES')
-  const [region, setRegion] = useState('')
-  const [province, setProvince] = useState('')
-  const [city, setCity] = useState('')
-  const [barangay, setBarangay] = useState('')
+  const [region, _setRegion] = useState('')
+  const [province, _setProvince] = useState('')
+  const [city, _setCity] = useState('')
+  const [barangay, _setBarangay] = useState('')
   const [addressLine1, setAddressLine1] = useState('')
-  const [landmark, setLandmark] = useState('')
+  const [landmark, _setLandmark] = useState('')
   const [dialCode, setDialCode] = useState(isPhToUae ? '+971' : '+63')
   const [phoneNumber, setPhoneNumber] = useState('')
   const [emailAddress, setEmailAddress] = useState('')
@@ -174,7 +174,7 @@ export default function ReceiverDetailsForm({ onNext, onBack, initialData, servi
     }
   }, [initialData, isPhToUae])
 
-  const onSubmit = (data: BookingFormData) => {
+  const onSubmit = (_data: BookingFormData) => {
     // Validate all required fields
     const fieldValidations = [
       { name: 'firstName', value: firstName },

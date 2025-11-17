@@ -186,16 +186,18 @@ export const uaeLocations = {
 export const uaeEmirates = Object.keys(uaeLocations["United Arab Emirates"])
 
 export const getCitiesForEmirate = (emirate: string): string[] => {
-  if (!emirate || !uaeLocations["United Arab Emirates"][emirate]) {
+  const uaeData = uaeLocations["United Arab Emirates"] as Record<string, Record<string, string[]>>
+  if (!emirate || !uaeData[emirate]) {
     return []
   }
-  return Object.keys(uaeLocations["United Arab Emirates"][emirate])
+  return Object.keys(uaeData[emirate])
 }
 
 export const getDistrictsForCity = (emirate: string, city: string): string[] => {
-  if (!emirate || !city || !uaeLocations["United Arab Emirates"][emirate]?.[city]) {
+  const uaeData = uaeLocations["United Arab Emirates"] as Record<string, Record<string, string[]>>
+  if (!emirate || !city || !uaeData[emirate]?.[city]) {
     return []
   }
-  return uaeLocations["United Arab Emirates"][emirate][city]
+  return uaeData[emirate][city]
 }
 

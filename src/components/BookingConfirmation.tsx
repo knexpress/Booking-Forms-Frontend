@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { ArrowLeft, CheckCircle, Plane } from 'lucide-react'
+import { ArrowLeft } from 'lucide-react'
 import { BookingFormData } from '../types'
 
 interface BookingConfirmationProps {

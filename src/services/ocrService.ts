@@ -204,7 +204,7 @@ async function processWithGoogle(imageBase64: string, side: 'front' | 'back'): P
 }
 
 // Mindee API Implementation (Specialized for ID documents)
-async function processWithMindee(imageBase64: string, side: 'front' | 'back'): Promise<OCRResult> {
+async function processWithMindee(imageBase64: string, _side: 'front' | 'back'): Promise<OCRResult> {
   try {
     const blob = base64ToBlob(imageBase64)
     const formData = new FormData()
@@ -255,7 +255,7 @@ async function processWithMindee(imageBase64: string, side: 'front' | 'back'): P
 }
 
 // Parse Emirates ID data from OCR text
-function parseEmiratesIDFromText(textData: any, side: 'front' | 'back'): EmiratesIDData {
+function parseEmiratesIDFromText(textData: any, _side: 'front' | 'back'): EmiratesIDData {
   // This is a simplified parser - enhance based on actual Emirates ID format
   const allText = JSON.stringify(textData).toLowerCase()
   
@@ -278,7 +278,7 @@ function parseEmiratesIDFromText(textData: any, side: 'front' | 'back'): Emirate
 }
 
 // Simulation mode (for development/testing)
-async function simulateOCR(imageBase64: string, side: 'front' | 'back'): Promise<OCRResult> {
+async function simulateOCR(_imageBase64: string, side: 'front' | 'back'): Promise<OCRResult> {
   console.log(`⏳ Simulating OCR for ${side} side with ${API_CONFIG.features.simulationDelay}ms delay...`)
   await new Promise(resolve => setTimeout(resolve, API_CONFIG.features.simulationDelay))
   console.log('✅ OCR simulation complete')
