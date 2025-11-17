@@ -176,35 +176,21 @@ export default function ServiceSelection({ onSelectService, onBack }: ServiceSel
                 
                 {/* Flags and Connection */}
                 <div className="flex items-center gap-4 mb-4">
-                  <div className="w-16 h-12 bg-red-600 rounded flex items-center justify-center">
-                    <span className="text-white text-xs font-bold">PH</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <div className="w-8 h-0.5 border-t-2 border-dashed border-gray-600"></div>
-                    {cargoType === 'sea' ? (
-                      <Ship className="w-6 h-6 text-gray-600" />
-                    ) : (
-                      <Plane className="w-6 h-6 text-gray-600" />
-                    )}
-                    <div className="w-8 h-0.5 border-t-2 border-dashed border-gray-600"></div>
-                  </div>
-                  <div className="w-16 h-12 bg-gradient-to-r from-red-500 via-green-500 to-black rounded flex items-center justify-center">
-                    <span className="text-white text-xs font-bold">UAE</span>
-                  </div>
-                </div>
-
-                {/* Box with Items */}
-                <div className="bg-gray-100 border-2 border-gray-300 rounded p-4 w-full max-w-xs">
-                  <div className="text-center mb-2">
-                    <span className="text-xs font-bold text-gray-700">KN EXPRESS</span>
-                  </div>
-                  <div className="grid grid-cols-3 gap-2">
-                    {[1, 2, 3, 4, 5, 6].map((item) => (
-                      <div key={item} className="bg-gray-200 rounded h-12 flex items-center justify-center">
-                        <span className="text-xs text-gray-500">📦</span>
-                      </div>
-                    ))}
-                  </div>
+                  <img 
+                    src="/PH.png" 
+                    alt="Philippines Flag" 
+                    className="w-16 h-12 object-cover rounded border-2 border-gray-300"
+                  />
+                  <img 
+                    src="/mid.png" 
+                    alt="Arrow" 
+                    className="w-[74px] h-[74px] object-contain"
+                  />
+                  <img 
+                    src="/UAE.jpg" 
+                    alt="UAE Flag" 
+                    className="w-16 h-12 object-cover rounded border-2 border-gray-300"
+                  />
                 </div>
               </div>
             </div>
@@ -239,31 +225,21 @@ export default function ServiceSelection({ onSelectService, onBack }: ServiceSel
                   
                   {/* Flags and Connection */}
                   <div className="flex items-center gap-4 mb-4">
-                    <div className="w-16 h-12 bg-gradient-to-r from-red-500 via-green-500 to-black rounded flex items-center justify-center">
-                      <span className="text-white text-xs font-bold">UAE</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <div className="w-8 h-0.5 border-t-2 border-dashed border-gray-600"></div>
-                      <Plane className="w-6 h-6 text-gray-600" />
-                      <div className="w-8 h-0.5 border-t-2 border-dashed border-gray-600"></div>
-                    </div>
-                    <div className="w-16 h-12 bg-red-600 rounded flex items-center justify-center">
-                      <span className="text-white text-xs font-bold">PH</span>
-                    </div>
-                  </div>
-
-                  {/* Box with Items */}
-                  <div className="bg-gray-100 border-2 border-gray-300 rounded p-4 w-full max-w-xs">
-                    <div className="text-center mb-2">
-                      <span className="text-xs font-bold text-gray-700">KN EXPRESS</span>
-                    </div>
-                    <div className="grid grid-cols-3 gap-2">
-                      {[1, 2, 3, 4, 5, 6].map((item) => (
-                        <div key={item} className="bg-gray-200 rounded h-12 flex items-center justify-center">
-                          <span className="text-xs text-gray-500">📦</span>
-                        </div>
-                      ))}
-                    </div>
+                    <img 
+                      src="/UAE.jpg" 
+                      alt="UAE Flag" 
+                      className="w-16 h-12 object-cover rounded border-2 border-gray-300"
+                    />
+                    <img 
+                      src="/mid.png" 
+                      alt="Arrow" 
+                      className="w-[74px] h-[74px] object-contain"
+                    />
+                    <img 
+                      src="/PH.png" 
+                      alt="Philippines Flag" 
+                      className="w-16 h-12 object-cover rounded border-2 border-gray-300"
+                    />
                   </div>
                 </div>
               </div>
@@ -283,16 +259,20 @@ export default function ServiceSelection({ onSelectService, onBack }: ServiceSel
           <div className="lg:col-span-1 bg-white border-2 border-green-600 rounded-lg p-6 shadow-lg">
             {/* Route Header */}
             <div className="flex items-center justify-between mb-6 pb-4 border-b-2 border-green-600">
-              <div className="w-12 h-8 bg-red-600 rounded flex items-center justify-center">
-                <span className="text-white text-xs font-bold">{routeInfo.originFlag}</span>
-              </div>
+              <img 
+                src={routeInfo.originFlag === 'PH' ? '/PH.png' : '/UAE.jpg'} 
+                alt={routeInfo.originFlag === 'PH' ? 'Philippines Flag' : 'UAE Flag'} 
+                className="w-12 h-8 object-cover rounded border-2 border-gray-300"
+              />
               <div className="text-center flex-1 mx-4">
                 <h3 className="text-lg font-bold text-gray-800">{routeInfo.title}</h3>
                 <p className="text-sm font-semibold text-green-600">{cargoType === 'air' ? 'AIR CARGO' : 'SEA CARGO'}</p>
               </div>
-              <div className="w-12 h-8 bg-gradient-to-r from-red-500 via-green-500 to-black rounded flex items-center justify-center">
-                <span className="text-white text-xs font-bold">{routeInfo.destinationFlag}</span>
-              </div>
+              <img 
+                src={routeInfo.destinationFlag === 'PH' ? '/PH.png' : '/UAE.jpg'} 
+                alt={routeInfo.destinationFlag === 'PH' ? 'Philippines Flag' : 'UAE Flag'} 
+                className="w-12 h-8 object-cover rounded border-2 border-gray-300"
+              />
             </div>
 
             {/* Pricing */}

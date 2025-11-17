@@ -111,6 +111,19 @@ export default function ReceiverDetailsForm({ onNext, onBack, initialData, servi
       }
     }
     
+    // Address Line 1 validation
+    if (name === 'addressLine1') {
+      const addressValue = value.trim()
+      if (addressValue.length < 5) {
+        setValidationErrors(prev => ({ ...prev, [name]: 'Address must be at least 5 characters' }))
+        return false
+      }
+      if (addressValue.length > 200) {
+        setValidationErrors(prev => ({ ...prev, [name]: 'Address must be less than 200 characters' }))
+        return false
+      }
+    }
+    
     setValidationErrors(prev => {
       const newErrors = { ...prev }
       delete newErrors[name]
@@ -179,7 +192,8 @@ export default function ReceiverDetailsForm({ onNext, onBack, initialData, servi
     const fieldValidations = [
       { name: 'firstName', value: firstName },
       { name: 'lastName', value: lastName },
-      { name: 'phoneNumber', value: phoneNumber }
+      { name: 'phoneNumber', value: phoneNumber },
+      { name: 'addressLine1', value: addressLine1 }
     ]
 
     let isValid = true
@@ -358,9 +372,11 @@ export default function ReceiverDetailsForm({ onNext, onBack, initialData, servi
                 Country <span className="text-red-500">*</span>
               </label>
               <div className="relative">
-                <div className={`absolute left-3 top-1/2 transform -translate-y-1/2 w-6 h-4 rounded z-10 ${
-                  isPhToUae ? 'bg-gradient-to-r from-red-500 via-green-500 to-black' : 'bg-red-600'
-                }`}></div>
+                <img 
+                  src={isPhToUae ? '/UAE.jpg' : '/PH.png'} 
+                  alt={isPhToUae ? 'UAE Flag' : 'Philippines Flag'} 
+                  className="absolute left-3 top-1/2 transform -translate-y-1/2 w-6 h-4 object-cover rounded z-10"
+                />
                 <select
                   value={country}
                   onChange={(e) => setCountry(e.target.value)}
@@ -378,17 +394,33 @@ export default function ReceiverDetailsForm({ onNext, onBack, initialData, servi
             {/* Address Line 1 */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
-                Address Line 1
+                Address Line 1 <span className="text-red-500">*</span>
               </label>
               <input
                 type="text"
                 value={addressLine1}
-                onChange={(e) => setAddressLine1(e.target.value)}
-                className="w-full px-3 sm:px-4 py-2.5 sm:py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all text-base min-h-[44px]"
+                onChange={(e) => {
+                  setAddressLine1(e.target.value)
+                  if (touched.addressLine1) {
+                    validateField('addressLine1', e.target.value)
+                  }
+                }}
+                onBlur={() => handleBlur('addressLine1', addressLine1)}
+                className={`w-full px-3 sm:px-4 py-2.5 sm:py-3 border rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all text-base min-h-[44px] ${
+                  touched.addressLine1 && validationErrors.addressLine1
+                    ? 'border-red-500'
+                    : 'border-gray-300'
+                }`}
                 placeholder="Flat/Villa No., Building, Street & Area"
                 maxLength={200}
+                required
               />
-              <p className="mt-1 text-xs text-gray-500">Optional: Detailed address information (max 200 characters)</p>
+              <p className="mt-1 text-xs text-gray-500">Detailed address information (max 200 characters)</p>
+              {touched.addressLine1 && validationErrors.addressLine1 && (
+                <p className="mt-1 text-xs text-red-500">
+                  <span>{validationErrors.addressLine1}</span>
+                </p>
+              )}
             </div>
           </div>
 
@@ -437,9 +469,11 @@ export default function ReceiverDetailsForm({ onNext, onBack, initialData, servi
                   Dial Code <span className="text-red-500">*</span>
                 </label>
                 <div className="relative">
-                  <div className={`absolute left-3 top-1/2 transform -translate-y-1/2 w-6 h-4 rounded z-10 ${
-                    !isPhToUae ? 'bg-red-600' : 'bg-gradient-to-r from-red-500 via-green-500 to-black'
-                  }`}></div>
+                  <img 
+                    src={isPhToUae ? '/UAE.jpg' : '/PH.png'} 
+                    alt={isPhToUae ? 'UAE Flag' : 'Philippines Flag'} 
+                    className="absolute left-3 top-1/2 transform -translate-y-1/2 w-6 h-4 object-cover rounded z-10"
+                  />
                   <select
                     value={dialCode}
                     onChange={(e) => setDialCode(e.target.value)}
