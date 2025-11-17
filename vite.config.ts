@@ -23,7 +23,7 @@ export default defineConfig({
     proxy: {
       // Proxy API requests to backend
       '/api': {
-        target: process.env.VITE_API_URL || 'http://localhost:5000',
+        target: process.env.VITE_API_BASE_URL || 'http://localhost:5000',
         changeOrigin: true,
         secure: true, // Set to true for HTTPS (ngrok uses HTTPS)
         rewrite: (path) => path,
