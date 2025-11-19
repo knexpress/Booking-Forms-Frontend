@@ -359,4 +359,106 @@ export function isEmiratesIDExpired(expiryDate: string): boolean {
   }
 }
 
+// Backend OCR API Response Types
+export interface BackendOCRResponse {
+  success: boolean
+  isEmiratesID?: boolean
+  side?: 'front' | 'back' | 'unknown'
+  requiresBackSide?: boolean
+  message?: string
+  identification?: {
+    isEmiratesID: boolean
+    side: 'front' | 'back' | 'unknown'
+    confidence: number
+    reason: string
+  }
+  extractedText?: string
+  requestId?: string
+  timestamp?: string
+  error?: string
+}
+
+/**
+ * Call backend OCR API endpoint to validate Emirates ID
+ * This replaces frontend validation - backend handles all validation logic
+ * Note: OCR process may take 30-60 seconds (DocuPipe needs to upload, process, and extract text)
+ */
+export async function validateEmiratesIDWithBackend(
+  imageBase64: string
+): Promise<BackendOCRResponse> {
+  const apiUrl = `${API_CONFIG.baseUrl}/api/ocr`
+  
+  // Create AbortController for timeout handling (90 seconds)
+  const controller = new AbortController()
+  const timeoutId = setTimeout(() => {
+    controller.abort()
+  }, 90000) // 90 second timeout as per documentation
+  
+  try {
+    console.log('🔍 Sending image to backend OCR API...', { url: apiUrl, baseUrl: API_CONFIG.baseUrl })
+    console.log('⏱️ OCR processing may take 30-60 seconds. Please wait...')
+    
+    // Check if baseUrl is configured
+    if (!API_CONFIG.baseUrl || API_CONFIG.baseUrl === 'http://localhost:5000') {
+      console.warn('⚠️ Using default localhost URL. Make sure backend is running or set VITE_API_BASE_URL environment variable.')
+    }
+    
+    const response = await fetch(apiUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        image: imageBase64,
+      }),
+      signal: controller.signal, // Add abort signal for timeout
+    })
+
+    // Clear timeout if request completes before timeout
+    clearTimeout(timeoutId)
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({ error: 'Unknown error' }))
+      const errorMessage = errorData.error || `HTTP ${response.status}: ${response.statusText}`
+      console.error('❌ Backend OCR API HTTP error:', { status: response.status, statusText: response.statusText, error: errorMessage })
+      throw new Error(errorMessage)
+    }
+
+    const result: BackendOCRResponse = await response.json()
+    console.log('✅ Backend OCR API response:', result)
+    
+    return result
+  } catch (error) {
+    // Clear timeout if error occurs
+    clearTimeout(timeoutId)
+    
+    console.error('❌ Backend OCR API error:', error)
+    
+    // Provide more specific error messages
+    let errorMessage = 'Failed to validate Emirates ID'
+    
+    if (error instanceof Error) {
+      // Handle AbortError (timeout)
+      if (error.name === 'AbortError') {
+        errorMessage = 'Request timed out after 90 seconds. The OCR process may take longer than expected. Please try again with a clearer image.'
+      } 
+      // Handle fetch errors (network issues)
+      else if (error instanceof TypeError && error.message === 'Failed to fetch') {
+        errorMessage = `Cannot connect to backend API. Please ensure the backend server is running at ${apiUrl} and CORS is enabled. Check your VITE_API_BASE_URL environment variable.`
+      } 
+      // Handle other errors
+      else {
+        errorMessage = error.message
+      }
+    }
+    
+    return {
+      success: false,
+      isEmiratesID: false,
+      side: 'unknown',
+      error: errorMessage,
+    }
+  }
+}
+
 

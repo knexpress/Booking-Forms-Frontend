@@ -2,8 +2,7 @@ import { useState, useRef, useCallback, useEffect } from 'react'
 import Webcam from 'react-webcam'
 import { Camera, CheckCircle, XCircle, RotateCcw, ArrowLeft, ArrowRight, Maximize2, Upload } from 'lucide-react'
 import { VerificationData } from '../types'
-import { processEmiratesID, validateEmiratesIDFormat, isEmiratesIDExpired } from '../services/ocrService'
-import { validateIsEmiratesID } from '../services/idValidationService'
+import { validateEmiratesIDWithBackend } from '../services/ocrService'
 import { API_CONFIG } from '../config/api.config'
 import {
   loadOpenCV,
@@ -69,6 +68,25 @@ export default function Step2EmiratesIDScan({ onComplete, onBack, service }: Ste
   // Ref to track if capture has been triggered (persists across renders)
   const captureTriggeredRef = useRef(false)
   
+  // Check if browser supports camera API
+  const checkCameraSupport = (): { supported: boolean; error?: string } => {
+    if (!navigator.mediaDevices) {
+      return {
+        supported: false,
+        error: 'Camera API is not supported in this browser. Please use a modern browser like Chrome, Firefox, or Edge.'
+      }
+    }
+    
+    if (!navigator.mediaDevices.getUserMedia) {
+      return {
+        supported: false,
+        error: 'getUserMedia is not available. Please ensure you are using HTTPS or localhost.'
+      }
+    }
+    
+    return { supported: true }
+  }
+  
   // Close modal function
   const closeScanModal = () => {
     stopAutoDetection()
@@ -92,6 +110,13 @@ export default function Step2EmiratesIDScan({ onComplete, onBack, service }: Ste
         console.warn('⚠️ Automatic ID detection unavailable. File upload is still available.')
       })
 
+    // Check camera support on mount
+    const supportCheck = checkCameraSupport()
+    if (!supportCheck.supported) {
+      console.warn('⚠️ Camera not supported:', supportCheck.error)
+      // Don't set error immediately - let user try first, then show error if needed
+    }
+
     return () => {
       // Cleanup detection intervals
       if (detectionIntervalRef.current) {
@@ -104,11 +129,39 @@ export default function Step2EmiratesIDScan({ onComplete, onBack, service }: Ste
   }, [])
 
   const requestCameraPermission = async () => {
+    // Check browser support first
+    const supportCheck = checkCameraSupport()
+    if (!supportCheck.supported) {
+      handleCameraError(new Error(supportCheck.error || 'Camera not supported'))
+      return false
+    }
+
+    // Helper function to add timeout to getUserMedia
+    const getUserMediaWithTimeout = async (constraints: MediaStreamConstraints, timeoutMs: number = 15000): Promise<MediaStream> => {
+      return Promise.race([
+        navigator.mediaDevices.getUserMedia(constraints),
+        new Promise<MediaStream>((_, reject) => {
+          setTimeout(() => {
+            // Create error with TimeoutError name for proper detection
+            const timeoutError = new Error('Timeout starting video source')
+            timeoutError.name = 'TimeoutError'
+            reject(timeoutError)
+          }, timeoutMs)
+        })
+      ])
+    }
+
     try {
-      // Request camera permission explicitly
-      const stream = await navigator.mediaDevices.getUserMedia({ 
-        video: { facingMode: 'environment' } 
-      })
+      console.log('📷 Requesting camera permission...')
+      
+      // Request camera permission explicitly with timeout (15 seconds)
+      const stream = await getUserMediaWithTimeout({ 
+        video: { 
+          facingMode: 'environment',
+          width: { ideal: 1920 },
+          height: { ideal: 1080 }
+        } 
+      }, 15000)
       
       // Stop the stream immediately - we just needed to request permission
       stream.getTracks().forEach(track => track.stop())
@@ -120,8 +173,54 @@ export default function Step2EmiratesIDScan({ onComplete, onBack, service }: Ste
       
       return true
     } catch (err) {
-      console.error('❌ Camera permission denied:', err)
-      handleCameraError(err as Error)
+      console.error('❌ Camera permission error:', err)
+      
+      let errorMessage = 'Camera access denied or not available'
+      const errorName = err instanceof Error ? err.name : (err as any)?.name || ''
+      const errorMsg = err instanceof Error ? err.message : String(err)
+      
+      // Check error name first (works for both DOMException and Error)
+      if (errorName === 'TimeoutError' || errorName === 'AbortError' || errorMsg.includes('Timeout') || errorMsg.includes('timeout')) {
+        errorMessage = 'Camera is taking too long to start. Please try again or use file upload. Make sure no other app is using the camera.'
+      } else if (err instanceof DOMException || errorName) {
+        switch (errorName) {
+          case 'NotAllowedError':
+          case 'PermissionDeniedError':
+            errorMessage = 'Camera permission was denied. Please allow camera access in your browser settings and try again.'
+            break
+          case 'NotFoundError':
+          case 'DevicesNotFoundError':
+            errorMessage = 'No camera found. Please connect a camera device.'
+            break
+          case 'NotReadableError':
+          case 'TrackStartError':
+            errorMessage = 'Camera is already in use by another application. Please close other apps using the camera.'
+            break
+          case 'OverconstrainedError':
+          case 'ConstraintNotSatisfiedError':
+            errorMessage = 'Camera constraints could not be satisfied. Trying with default settings...'
+            // Try again with simpler constraints and shorter timeout
+            try {
+              const fallbackStream = await getUserMediaWithTimeout({ video: true }, 10000)
+              fallbackStream.getTracks().forEach(track => track.stop())
+              setCameraError(null)
+              console.log('✅ Camera permission granted with fallback constraints!')
+              return true
+            } catch (fallbackErr) {
+              errorMessage = 'Camera access failed. Please try again or use file upload.'
+            }
+            break
+          case 'NotSupportedError':
+            errorMessage = 'Camera is not supported in this browser. Please use a modern browser.'
+            break
+          default:
+            errorMessage = errorMsg || 'Camera access error. Please try again.'
+        }
+      } else if (err instanceof Error) {
+        errorMessage = errorMsg
+      }
+      
+      handleCameraError(new Error(errorMessage))
       return false
     }
   }
@@ -295,73 +394,69 @@ export default function Step2EmiratesIDScan({ onComplete, onBack, service }: Ste
 
       // IMPORTANT: Always use cropped image for storage and processing
       // The cropped image contains only the ID card frame, not the whole camera view
-      const useTrueID = !API_CONFIG.features.simulationMode
 
-      console.log('📸 Step 6: Validating Emirates ID...', { side: captureSide })
-      setProcessingMessage('Validating Emirates ID card...')
+      console.log('📸 Step 6: Validating Emirates ID with backend API...', { side: captureSide })
+      setProcessingMessage('Processing Emirates ID... This may take 30-60 seconds.')
       
-      // Validate that the captured image is actually an Emirates ID
+      // Validate that the captured image is actually an Emirates ID using backend API
       // Use cropped image for validation
-      const validationResult = await validateIsEmiratesID(croppedBase64, captureSide)
+      // Note: OCR process may take 30-60 seconds (DocuPipe needs to upload, process, and extract text)
+      const validationResult = await validateEmiratesIDWithBackend(croppedBase64)
       
-      if (!validationResult.isValid || !validationResult.isEmiratesID) {
+      // Handle API response according to documentation
+      if (!validationResult.success) {
         throw new Error(
           validationResult.error || 
-          `This does not appear to be an Emirates ID card. Please ensure you are scanning the ${captureSide} of a valid Emirates ID.`
+          'Failed to validate Emirates ID. Please try again.'
+        )
+      }
+      
+      // Check if it's an Emirates ID
+      if (!validationResult.isEmiratesID) {
+        throw new Error(
+          validationResult.message || 
+          'This does not appear to be an Emirates ID card. Please ensure you are scanning a valid Emirates ID.'
+        )
+      }
+      
+      // Check if the detected side matches what we're trying to capture
+      if (captureSide === 'front' && validationResult.side !== 'front') {
+        throw new Error(
+          validationResult.message || 
+          'Please scan the front side of your Emirates ID.'
+        )
+      }
+      
+      if (captureSide === 'back' && validationResult.side !== 'back') {
+        throw new Error(
+          validationResult.message || 
+          'Please scan the back side of your Emirates ID.'
         )
       }
       
       console.log('✅ Emirates ID validation passed', { 
-        confidence: validationResult.confidence,
-        side: captureSide 
+        confidence: validationResult.identification?.confidence,
+        side: validationResult.side,
+        requiresBackSide: validationResult.requiresBackSide
       })
+
+      console.log('📸 Step 7: Storing CROPPED image...', { side: captureSide })
       
-      console.log('📸 Step 7: Processing and storing CROPPED image only...', { mode: useTrueID ? 'TRUE-ID' : 'OCR', side: captureSide })
+      // Store the cropped image
+      if (captureSide === 'front') {
+        console.log('💾 Storing front CROPPED image...')
+        setFrontImage(croppedBase64)
+        setEidData({ captured: true, mode: 'BACKEND-OCR' })
+        console.log('✅ Front cropped image stored in state')
+      } else if (captureSide === 'back') {
+        console.log('💾 Storing back CROPPED image...')
+        setBackImage(croppedBase64)
+        console.log('✅ Back cropped image stored in state')
+      }
       
-      if (useTrueID) {
-        // TRUE-ID mode: Store only the cropped image (ID card frame only)
-        if (captureSide === 'front') {
-          console.log('💾 Storing front CROPPED image (TRUE-ID mode)...')
-          setFrontImage(croppedBase64) // Cropped image contains only the ID card
-          setEidData({ captured: true, mode: 'TRUE-ID' })
-          console.log('✅ Front cropped image stored in state (TRUE-ID mode)')
-        } else if (captureSide === 'back') {
-          console.log('💾 Storing back CROPPED image (TRUE-ID mode)...')
-          setBackImage(croppedBase64) // Cropped image contains only the ID card
-          console.log('✅ Back cropped image stored in state (TRUE-ID mode)')
-        }
-      } else {
-        // Simulation mode: Process with OCR using cropped image
-        console.log('🔍 Processing CROPPED image with OCR...')
-        const result = await processEmiratesID(croppedBase64, captureSide) // Use cropped image for OCR
-        
-        if (!result.success) {
-          throw new Error(result.error || 'Failed to process Emirates ID')
-        }
-        
-        if (captureSide === 'front' && result.data) {
-          // Validate ID data
-          if (result.data.idNumber && !validateEmiratesIDFormat(result.data.idNumber)) {
-            throw new Error('Invalid Emirates ID format detected. Please ensure the ID is clear and properly aligned.')
-          }
-          
-          if (result.data.expiryDate && isEmiratesIDExpired(result.data.expiryDate)) {
-            throw new Error('This Emirates ID has expired. Please use a valid ID.')
-          }
-          
-          setEidData(result.data)
-        }
-        
-        // Store only the cropped image (ID card frame only)
-        if (captureSide === 'front') {
-          console.log('💾 Storing front CROPPED image (OCR mode)...')
-          setFrontImage(croppedBase64) // Always use cropped image
-          console.log('✅ Front cropped image stored in state (OCR mode)')
-        } else if (captureSide === 'back') {
-          console.log('💾 Storing back CROPPED image (OCR mode)...')
-          setBackImage(croppedBase64) // Always use cropped image
-          console.log('✅ Back cropped image stored in state (OCR mode)')
-        }
+      // If front side detected and back side is required, show message
+      if (captureSide === 'front' && validationResult.requiresBackSide) {
+        console.log('ℹ️ Front side detected. Back side will be requested next.')
       }
 
       console.log('🎉 ===== IMAGE CAPTURE COMPLETED SUCCESSFULLY =====')
@@ -594,12 +689,17 @@ export default function Step2EmiratesIDScan({ onComplete, onBack, service }: Ste
   const startScan = async (side: 'front' | 'back') => {
     setError(null)
     
-    // If there was a previous camera error, try requesting permission again
-    if (cameraError) {
-      const granted = await requestCameraPermission()
-      if (!granted) {
-        return // Permission still denied, keep showing error and upload option
-      }
+    // Check camera support first
+    const supportCheck = checkCameraSupport()
+    if (!supportCheck.supported) {
+      handleCameraError(new Error(supportCheck.error || 'Camera not supported'))
+      return
+    }
+    
+    // Always request permission before starting scan
+    const granted = await requestCameraPermission()
+    if (!granted) {
+      return // Permission denied, keep showing error and upload option
     }
     
     setCameraError(null)
@@ -703,41 +803,53 @@ export default function Step2EmiratesIDScan({ onComplete, onBack, service }: Ste
           // Continue with full image as fallback
         }
         
-        // Validate that the image is actually an Emirates ID
-        setProcessingMessage('Validating Emirates ID card...')
-        const validationResult = await validateIsEmiratesID(croppedImage, side)
+        // Validate that the image is actually an Emirates ID using backend API
+        // Note: OCR process may take 30-60 seconds (DocuPipe needs to upload, process, and extract text)
+        setProcessingMessage('Processing Emirates ID... This may take 30-60 seconds.')
+        const validationResult = await validateEmiratesIDWithBackend(croppedImage)
         
-        if (!validationResult.isValid || !validationResult.isEmiratesID) {
+        // Handle API response according to documentation
+        if (!validationResult.success) {
           throw new Error(
             validationResult.error || 
-            `This does not appear to be an Emirates ID card. Please ensure you are uploading the ${side} of a valid Emirates ID.`
+            'Failed to validate Emirates ID. Please try again.'
           )
         }
         
-        const useTrueID = !API_CONFIG.features.simulationMode
+        // Check if it's an Emirates ID
+        if (!validationResult.isEmiratesID) {
+          throw new Error(
+            validationResult.message || 
+            'This does not appear to be an Emirates ID card. Please ensure you are uploading a valid Emirates ID.'
+          )
+        }
         
-        // Store only the cropped image (or full image if cropping failed)
-        if (useTrueID) {
-          await new Promise(resolve => setTimeout(resolve, 500))
-          if (side === 'front') {
-            setFrontImage(croppedImage) // Store cropped image only
-            setEidData({ captured: true, mode: 'TRUE-ID' })
-          } else {
-            setBackImage(croppedImage) // Store cropped image only
-          }
+        // Check if the detected side matches what we're trying to upload
+        if (side === 'front' && validationResult.side !== 'front') {
+          throw new Error(
+            validationResult.message || 
+            'Please upload the front side of your Emirates ID.'
+          )
+        }
+        
+        if (side === 'back' && validationResult.side !== 'back') {
+          throw new Error(
+            validationResult.message || 
+            'Please upload the back side of your Emirates ID.'
+          )
+        }
+        
+        // Store the cropped image (or full image if cropping failed)
+        if (side === 'front') {
+          setFrontImage(croppedImage)
+          setEidData({ captured: true, mode: 'BACKEND-OCR' })
         } else {
-          const result = await processEmiratesID(croppedImage, side) // Use cropped image for OCR
-          if (!result.success) {
-            throw new Error(result.error || 'Failed to process Emirates ID')
-          }
-          if (side === 'front' && result.data) {
-            setEidData(result.data)
-          }
-          if (side === 'front') {
-            setFrontImage(croppedImage) // Store cropped image only
-          } else {
-            setBackImage(croppedImage) // Store cropped image only
-          }
+          setBackImage(croppedImage)
+        }
+        
+        // If front side detected and back side is required, show message
+        if (side === 'front' && validationResult.requiresBackSide) {
+          console.log('ℹ️ Front side detected. Back side will be requested next.')
         }
         
         setIsProcessing(false)
@@ -1159,7 +1271,10 @@ export default function Step2EmiratesIDScan({ onComplete, onBack, service }: Ste
                         }}
                         onUserMediaError={(err) => {
                           console.error('❌ Front camera error in modal:', err)
-                          handleCameraError(err)
+                          // Request permission again with better error handling
+                          requestCameraPermission().catch(() => {
+                            // Error already handled in requestCameraPermission
+                          })
                         }}
                         forceScreenshotSourceSize={true}
                       />
@@ -1242,8 +1357,8 @@ export default function Step2EmiratesIDScan({ onComplete, onBack, service }: Ste
                   {isProcessing && (
                     <div className="text-center py-6">
                       <div className="animate-spin rounded-full h-16 w-16 border-b-4 border-green-600 mx-auto mb-4" />
-                      <p className="text-gray-600 text-lg font-semibold">{processingMessage || 'Validating Emirates ID...'}</p>
-                      <p className="text-sm text-gray-500 mt-2">Please wait, this may take a few seconds</p>
+                      <p className="text-gray-600 text-lg font-semibold">{processingMessage || 'Processing Emirates ID... This may take 30-60 seconds.'}</p>
+                      <p className="text-sm text-gray-500 mt-2">Please wait, the OCR process is analyzing your document</p>
                     </div>
                   )}
 
@@ -1404,7 +1519,10 @@ export default function Step2EmiratesIDScan({ onComplete, onBack, service }: Ste
                         }}
                         onUserMediaError={(err) => {
                           console.error('❌ Back camera error in modal:', err)
-                          handleCameraError(err)
+                          // Request permission again with better error handling
+                          requestCameraPermission().catch(() => {
+                            // Error already handled in requestCameraPermission
+                          })
                         }}
                         forceScreenshotSourceSize={true}
                       />
@@ -1487,8 +1605,8 @@ export default function Step2EmiratesIDScan({ onComplete, onBack, service }: Ste
                   {isProcessing && (
                     <div className="text-center py-6">
                       <div className="animate-spin rounded-full h-16 w-16 border-b-4 border-green-600 mx-auto mb-4" />
-                      <p className="text-gray-600 text-lg font-semibold">{processingMessage || 'Validating Emirates ID...'}</p>
-                      <p className="text-sm text-gray-500 mt-2">Please wait, this may take a few seconds</p>
+                      <p className="text-gray-600 text-lg font-semibold">{processingMessage || 'Processing Emirates ID... This may take 30-60 seconds.'}</p>
+                      <p className="text-sm text-gray-500 mt-2">Please wait, the OCR process is analyzing your document</p>
                     </div>
                   )}
 
