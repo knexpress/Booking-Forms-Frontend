@@ -3,7 +3,6 @@ import Webcam from 'react-webcam'
 import { Camera, CheckCircle, XCircle, RotateCcw, ArrowLeft, ArrowRight, Maximize2, Upload } from 'lucide-react'
 import { VerificationData } from '../types'
 import { validateEmiratesIDWithBackend } from '../services/ocrService'
-import { API_CONFIG } from '../config/api.config'
 import {
   loadOpenCV,
   detectDocumentInFrame,
