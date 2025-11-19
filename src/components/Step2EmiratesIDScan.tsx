@@ -910,11 +910,9 @@ export default function Step2EmiratesIDScan({ onComplete, onBack, service }: Ste
         if (side === 'front') {
           setFrontImage(croppedImage)
           setEidData({ captured: true, mode: 'BACKEND-OCR' })
-          setSuccessMessage('UAE ID Front verified successfully!')
           console.log('✅ UAE ID Front verified successfully!')
         } else {
           setBackImage(croppedImage)
-          setSuccessMessage('UAE ID Back verified successfully!')
           console.log('✅ UAE ID Back verified successfully!')
         }
         
@@ -927,10 +925,20 @@ export default function Step2EmiratesIDScan({ onComplete, onBack, service }: Ste
         setCurrentSide(null)
         setError(null) // Clear any previous errors
         
-        // Clear success message after 3 seconds
-        setTimeout(() => {
-          setSuccessMessage(null)
-        }, 3000)
+        // Show success toast message
+        if (side === 'front') {
+          showToast({
+            type: 'success',
+            message: 'UAE ID Front verified successfully!',
+            duration: 5000
+          })
+        } else {
+          showToast({
+            type: 'success',
+            message: 'UAE ID Back verified successfully!',
+            duration: 5000
+          })
+        }
       } catch (err) {
         console.error('File processing error:', err)
         setError(err instanceof Error ? err.message : 'Failed to process image')
