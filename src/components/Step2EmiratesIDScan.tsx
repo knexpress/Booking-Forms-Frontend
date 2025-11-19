@@ -3,6 +3,7 @@ import Webcam from 'react-webcam'
 import { Camera, CheckCircle, XCircle, RotateCcw, ArrowLeft, ArrowRight, Maximize2, Upload } from 'lucide-react'
 import { VerificationData } from '../types'
 import { validateEmiratesIDWithBackend } from '../services/ocrService'
+import { showToast } from './ToastContainer'
 import {
   loadOpenCV,
   detectDocumentInFrame,
@@ -41,7 +42,6 @@ export default function Step2EmiratesIDScan({ onComplete, onBack, service }: Ste
   const [philippinesIdBack, setPhilippinesIdBack] = useState<string | null>(null)
   const [isProcessing, setIsProcessing] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [successMessage, setSuccessMessage] = useState<string | null>(null)
   const [_eidData, setEidData] = useState<any>(null)
   const [processingMessage, setProcessingMessage] = useState<string>('Processing Emirates ID data...')
   const [cameraError, setCameraError] = useState<string | null>(null)
@@ -413,49 +413,55 @@ export default function Step2EmiratesIDScan({ onComplete, onBack, service }: Ste
       
       // Check if it's an Emirates ID
       if (!validationResult.isEmiratesID) {
-        // Close modal immediately and show error message
+        // Close modal immediately
         setIsProcessing(false)
         setCurrentSide(null)
         setModalOpen(false)
         setModalSide(null)
         stopAutoDetection()
         
-        // Show error message asking to retry
-        setError(
-          validationResult.message || 
-          'This does not appear to be an Emirates ID card. Please try again with a valid Emirates ID.'
-        )
+        // Show error toast message
+        showToast({
+          type: 'error',
+          message: validationResult.message || 
+            'This does not appear to be an Emirates ID card. Please try again with a valid Emirates ID.',
+          duration: 6000
+        })
         return // Exit early, don't throw error
       }
       
       // Check if the detected side matches what we're trying to capture
       if (captureSide === 'front' && validationResult.side !== 'front') {
-        // Close modal and show error
+        // Close modal and show error toast
         setIsProcessing(false)
         setCurrentSide(null)
         setModalOpen(false)
         setModalSide(null)
         stopAutoDetection()
         
-        setError(
-          validationResult.message || 
-          'Please scan the front side of your Emirates ID. Please try again.'
-        )
+        showToast({
+          type: 'error',
+          message: validationResult.message || 
+            'Please scan the front side of your Emirates ID. Please try again.',
+          duration: 6000
+        })
         return
       }
       
       if (captureSide === 'back' && validationResult.side !== 'back') {
-        // Close modal and show error
+        // Close modal and show error toast
         setIsProcessing(false)
         setCurrentSide(null)
         setModalOpen(false)
         setModalSide(null)
         stopAutoDetection()
         
-        setError(
-          validationResult.message || 
-          'Please scan the back side of your Emirates ID. Please try again.'
-        )
+        showToast({
+          type: 'error',
+          message: validationResult.message || 
+            'Please scan the back side of your Emirates ID. Please try again.',
+          duration: 6000
+        })
         return
       }
       
@@ -491,24 +497,27 @@ export default function Step2EmiratesIDScan({ onComplete, onBack, service }: Ste
       setCurrentSide(null)
       setError(null) // Clear any previous errors
       
-      // Show success message
-      if (captureSide === 'front') {
-        setSuccessMessage('UAE ID Front verified successfully!')
-        console.log('✅ UAE ID Front verified successfully!')
-      } else {
-        setSuccessMessage('UAE ID Back verified successfully!')
-        console.log('✅ UAE ID Back verified successfully!')
-      }
-      
       // Close modal immediately after successful capture
       setModalOpen(false)
       setModalSide(null)
       stopAutoDetection()
       
-      // Clear success message after 3 seconds
-      setTimeout(() => {
-        setSuccessMessage(null)
-      }, 3000)
+      // Show success toast message
+      if (captureSide === 'front') {
+        showToast({
+          type: 'success',
+          message: 'UAE ID Front verified successfully!',
+          duration: 5000
+        })
+        console.log('✅ UAE ID Front verified successfully!')
+      } else {
+        showToast({
+          type: 'success',
+          message: 'UAE ID Back verified successfully!',
+          duration: 5000
+        })
+        console.log('✅ UAE ID Back verified successfully!')
+      }
     } catch (err) {
       console.error('Auto-capture error:', err)
       // Close modal on error
@@ -518,8 +527,12 @@ export default function Step2EmiratesIDScan({ onComplete, onBack, service }: Ste
       setModalSide(null)
       stopAutoDetection()
       
-      // Show error message asking to retry
-      setError(err instanceof Error ? err.message : 'Failed to capture document. Please try again.')
+      // Show error toast message asking to retry
+      showToast({
+        type: 'error',
+        message: err instanceof Error ? err.message : 'Failed to capture document. Please try again.',
+        duration: 6000
+      })
       
       // Reset capture flag on error to allow retry
       captureTriggeredRef.current = false
@@ -1303,99 +1316,110 @@ export default function Step2EmiratesIDScan({ onComplete, onBack, service }: Ste
                     </p>
                   </div>
 
-                  {/* Camera View - Full Screen */}
-                  {!cameraError ? (
-                    <div className="relative bg-black rounded-lg overflow-hidden flex-1 min-h-[40vh] sm:min-h-[50vh] flex items-center justify-center">
-                      <Webcam
-                        ref={webcamRef}
-                        audio={false}
-                        screenshotFormat="image/jpeg"
-                        screenshotQuality={isMobile ? 0.85 : 0.95}
-                        className="w-full h-full object-contain"
-                        videoConstraints={{
-                          width: isMobile ? { ideal: 1280, max: 1920 } : { ideal: 1920 },
-                          height: isMobile ? { ideal: 720, max: 1080 } : { ideal: 1080 },
-                          facingMode: 'environment',
-                          aspectRatio: { ideal: 16/9 }
-                        }}
-                        onUserMedia={(_stream) => {
-                          console.log('✅ Front camera loaded in modal')
-                          setCameraError(null)
-                          setError(null)
-                          setTimeout(() => {
-                            if (webcamRef.current?.video) {
-                              videoRef.current = webcamRef.current.video
-                              if (opencvLoaded && modalSide === 'front') {
-                                console.log('🎬 Starting front detection in modal')
-                                setCurrentSide('front')
-                                startAutoDetection('front')
-                              }
-                            }
-                          }, 500)
-                        }}
-                        onUserMediaError={(err) => {
-                          console.error('❌ Front camera error in modal:', err)
-                          // Request permission again with better error handling
-                          requestCameraPermission().catch(() => {
-                            // Error already handled in requestCameraPermission
-                          })
-                        }}
-                        forceScreenshotSourceSize={true}
-                      />
-                      
-                      {/* Detection overlay canvas */}
-                      <canvas
-                        ref={canvasRef}
-                        className="absolute inset-0 w-full h-full pointer-events-none"
-                        style={{ zIndex: 10 }}
-                      />
-                      
-                      {/* Guide frame - smaller, centered frame for better focus */}
-                      <div className={`absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-[70%] sm:w-[65%] md:w-[60%] aspect-[85.6/53.98] border-[3px] sm:border-4 border-dashed rounded-lg pointer-events-none transition-all duration-300 ${
-                        detectionReady 
-                          ? 'border-green-500 bg-green-500 bg-opacity-20 shadow-lg shadow-green-500/50' 
-                          : detectedPoints 
-                            ? 'border-yellow-400 bg-yellow-400 bg-opacity-10' 
-                            : 'border-gray-300'
-                      }`} 
-                      style={{ 
-                        maxWidth: isMobile ? '320px' : '400px',
-                        maxHeight: isMobile ? '200px' : '250px'
-                      }} />
-                      
-                      {/* Corner guides for better alignment */}
-                      <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-[70%] sm:w-[65%] md:w-[60%] aspect-[85.6/53.98] pointer-events-none"
-                        style={{ 
-                          maxWidth: isMobile ? '320px' : '400px',
-                          maxHeight: isMobile ? '200px' : '250px'
-                        }}>
-                        {/* Corner markers */}
-                        <div className="absolute top-0 left-0 w-6 h-6 border-t-4 border-l-4 border-white rounded-tl-lg"></div>
-                        <div className="absolute top-0 right-0 w-6 h-6 border-t-4 border-r-4 border-white rounded-tr-lg"></div>
-                        <div className="absolute bottom-0 left-0 w-6 h-6 border-b-4 border-l-4 border-white rounded-bl-lg"></div>
-                        <div className="absolute bottom-0 right-0 w-6 h-6 border-b-4 border-r-4 border-white rounded-br-lg"></div>
+                  {/* Loading Screen - Show when processing */}
+                  {isProcessing ? (
+                    <div className="flex-1 bg-gray-50 rounded-lg flex items-center justify-center min-h-[50vh]">
+                      <div className="text-center py-8 px-4">
+                        <div className="animate-spin rounded-full h-20 w-20 border-b-4 border-green-600 mx-auto mb-6" />
+                        <p className="text-gray-700 text-xl font-semibold mb-2">{processingMessage || 'Processing Emirates ID... This may take 30-60 seconds.'}</p>
+                        <p className="text-sm text-gray-500">Please wait, the OCR process is analyzing your document</p>
                       </div>
-                      
-                      {/* Detection status - positioned above the frame */}
-                      {isDetecting && (
-                        <div className="absolute top-[calc(50%-15vh)] sm:top-[calc(50%-18vh)] left-1/2 transform -translate-x-1/2 z-20 w-[90%] sm:w-auto max-w-md">
-                          <div className={`px-3 sm:px-4 md:px-6 py-2 sm:py-3 md:py-4 rounded-lg text-white text-sm sm:text-base md:text-lg font-bold shadow-lg text-center ${
-                            detectionReady 
-                              ? 'bg-green-600 animate-pulse' 
-                              : detectedPoints 
-                                ? 'bg-yellow-600' 
-                                : 'bg-blue-600'
-                          }`}>
-                            {detectionReady 
-                              ? '✓ Ready! Capturing...' 
-                              : detectedPoints 
-                                ? `Hold steady... ${!isMobile ? `(Blur: ${lastBlurScore.toFixed(0)})` : ''}` 
-                                : 'Position ID card in the centered frame'}
-                          </div>
-                        </div>
-                      )}
                     </div>
                   ) : (
+                    <>
+                      {/* Camera View - Full Screen */}
+                      {!cameraError ? (
+                        <div className="relative bg-black rounded-lg overflow-hidden flex-1 min-h-[40vh] sm:min-h-[50vh] flex items-center justify-center">
+                          <Webcam
+                            ref={webcamRef}
+                            audio={false}
+                            screenshotFormat="image/jpeg"
+                            screenshotQuality={isMobile ? 0.85 : 0.95}
+                            className="w-full h-full object-contain"
+                            videoConstraints={{
+                              width: isMobile ? { ideal: 1280, max: 1920 } : { ideal: 1920 },
+                              height: isMobile ? { ideal: 720, max: 1080 } : { ideal: 1080 },
+                              facingMode: 'environment',
+                              aspectRatio: { ideal: 16/9 }
+                            }}
+                            onUserMedia={(_stream) => {
+                              console.log('✅ Front camera loaded in modal')
+                              setCameraError(null)
+                              setError(null)
+                              setTimeout(() => {
+                                if (webcamRef.current?.video) {
+                                  videoRef.current = webcamRef.current.video
+                                  if (opencvLoaded && modalSide === 'front') {
+                                    console.log('🎬 Starting front detection in modal')
+                                    setCurrentSide('front')
+                                    startAutoDetection('front')
+                                  }
+                                }
+                              }, 500)
+                            }}
+                            onUserMediaError={(err) => {
+                              console.error('❌ Front camera error in modal:', err)
+                              // Request permission again with better error handling
+                              requestCameraPermission().catch(() => {
+                                // Error already handled in requestCameraPermission
+                              })
+                            }}
+                            forceScreenshotSourceSize={true}
+                          />
+                          
+                          {/* Detection overlay canvas */}
+                          <canvas
+                            ref={canvasRef}
+                            className="absolute inset-0 w-full h-full pointer-events-none"
+                            style={{ zIndex: 10 }}
+                          />
+                          
+                          {/* Guide frame - smaller, centered frame for better focus */}
+                          <div className={`absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-[70%] sm:w-[65%] md:w-[60%] aspect-[85.6/53.98] border-[3px] sm:border-4 border-dashed rounded-lg pointer-events-none transition-all duration-300 ${
+                            detectionReady 
+                              ? 'border-green-500 bg-green-500 bg-opacity-20 shadow-lg shadow-green-500/50' 
+                              : detectedPoints 
+                                ? 'border-yellow-400 bg-yellow-400 bg-opacity-10' 
+                                : 'border-gray-300'
+                          }`} 
+                          style={{ 
+                            maxWidth: isMobile ? '320px' : '400px',
+                            maxHeight: isMobile ? '200px' : '250px'
+                          }} />
+                          
+                          {/* Corner guides for better alignment */}
+                          <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-[70%] sm:w-[65%] md:w-[60%] aspect-[85.6/53.98] pointer-events-none"
+                            style={{ 
+                              maxWidth: isMobile ? '320px' : '400px',
+                              maxHeight: isMobile ? '200px' : '250px'
+                            }}>
+                            {/* Corner markers */}
+                            <div className="absolute top-0 left-0 w-6 h-6 border-t-4 border-l-4 border-white rounded-tl-lg"></div>
+                            <div className="absolute top-0 right-0 w-6 h-6 border-t-4 border-r-4 border-white rounded-tr-lg"></div>
+                            <div className="absolute bottom-0 left-0 w-6 h-6 border-b-4 border-l-4 border-white rounded-bl-lg"></div>
+                            <div className="absolute bottom-0 right-0 w-6 h-6 border-b-4 border-r-4 border-white rounded-br-lg"></div>
+                          </div>
+                          
+                          {/* Detection status - positioned above the frame */}
+                          {isDetecting && (
+                            <div className="absolute top-[calc(50%-15vh)] sm:top-[calc(50%-18vh)] left-1/2 transform -translate-x-1/2 z-20 w-[90%] sm:w-auto max-w-md">
+                              <div className={`px-3 sm:px-4 md:px-6 py-2 sm:py-3 md:py-4 rounded-lg text-white text-sm sm:text-base md:text-lg font-bold shadow-lg text-center ${
+                                detectionReady 
+                                  ? 'bg-green-600 animate-pulse' 
+                                  : detectedPoints 
+                                    ? 'bg-yellow-600' 
+                                    : 'bg-blue-600'
+                              }`}>
+                                {detectionReady 
+                                  ? '✓ Ready! Capturing...' 
+                                  : detectedPoints 
+                                    ? `Hold steady... ${!isMobile ? `(Blur: ${lastBlurScore.toFixed(0)})` : ''}` 
+                                    : 'Position ID card in the centered frame'}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      ) : (
                     <div className="flex-1 bg-gray-100 rounded-lg p-8 text-center flex items-center justify-center min-h-[50vh]">
                       <div>
                         <Camera className="w-20 h-20 text-gray-400 mx-auto mb-4" />
@@ -1414,15 +1438,6 @@ export default function Step2EmiratesIDScan({ onComplete, onBack, service }: Ste
                           <span className="btn-secondary inline-block">📁 Choose File</span>
                         </label>
                       </div>
-                    </div>
-                  )}
-
-                  {/* Processing indicator */}
-                  {isProcessing && (
-                    <div className="text-center py-6">
-                      <div className="animate-spin rounded-full h-16 w-16 border-b-4 border-green-600 mx-auto mb-4" />
-                      <p className="text-gray-600 text-lg font-semibold">{processingMessage || 'Processing Emirates ID... This may take 30-60 seconds.'}</p>
-                      <p className="text-sm text-gray-500 mt-2">Please wait, the OCR process is analyzing your document</p>
                     </div>
                   )}
 
@@ -1551,99 +1566,110 @@ export default function Step2EmiratesIDScan({ onComplete, onBack, service }: Ste
                     </p>
                   </div>
 
-                  {/* Camera View - Full Screen */}
-                  {!cameraError ? (
-                    <div className="relative bg-black rounded-lg overflow-hidden flex-1 min-h-[40vh] sm:min-h-[50vh] flex items-center justify-center">
-                      <Webcam
-                        ref={webcamRef}
-                        audio={false}
-                        screenshotFormat="image/jpeg"
-                        screenshotQuality={isMobile ? 0.85 : 0.95}
-                        className="w-full h-full object-contain"
-                        videoConstraints={{
-                          width: isMobile ? { ideal: 1280, max: 1920 } : { ideal: 1920 },
-                          height: isMobile ? { ideal: 720, max: 1080 } : { ideal: 1080 },
-                          facingMode: 'environment',
-                          aspectRatio: { ideal: 16/9 }
-                        }}
-                        onUserMedia={(_stream) => {
-                          console.log('✅ Back camera loaded in modal')
-                          setCameraError(null)
-                          setError(null)
-                          setTimeout(() => {
-                            if (webcamRef.current?.video) {
-                              videoRef.current = webcamRef.current.video
-                              if (opencvLoaded && modalSide === 'back') {
-                                console.log('🎬 Starting back detection in modal')
-                                setCurrentSide('back')
-                                startAutoDetection('back')
-                              }
-                            }
-                          }, 500)
-                        }}
-                        onUserMediaError={(err) => {
-                          console.error('❌ Back camera error in modal:', err)
-                          // Request permission again with better error handling
-                          requestCameraPermission().catch(() => {
-                            // Error already handled in requestCameraPermission
-                          })
-                        }}
-                        forceScreenshotSourceSize={true}
-                      />
-                      
-                      {/* Detection overlay canvas */}
-                      <canvas
-                        ref={canvasRef}
-                        className="absolute inset-0 w-full h-full pointer-events-none"
-                        style={{ zIndex: 10 }}
-                      />
-                      
-                      {/* Guide frame - smaller, centered frame for better focus */}
-                      <div className={`absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-[70%] sm:w-[65%] md:w-[60%] aspect-[85.6/53.98] border-[3px] sm:border-4 border-dashed rounded-lg pointer-events-none transition-all duration-300 ${
-                        detectionReady 
-                          ? 'border-green-500 bg-green-500 bg-opacity-20 shadow-lg shadow-green-500/50' 
-                          : detectedPoints 
-                            ? 'border-yellow-400 bg-yellow-400 bg-opacity-10' 
-                            : 'border-gray-300'
-                      }`} 
-                      style={{ 
-                        maxWidth: isMobile ? '320px' : '400px',
-                        maxHeight: isMobile ? '200px' : '250px'
-                      }} />
-                      
-                      {/* Corner guides for better alignment */}
-                      <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-[70%] sm:w-[65%] md:w-[60%] aspect-[85.6/53.98] pointer-events-none"
-                        style={{ 
-                          maxWidth: isMobile ? '320px' : '400px',
-                          maxHeight: isMobile ? '200px' : '250px'
-                        }}>
-                        {/* Corner markers */}
-                        <div className="absolute top-0 left-0 w-6 h-6 border-t-4 border-l-4 border-white rounded-tl-lg"></div>
-                        <div className="absolute top-0 right-0 w-6 h-6 border-t-4 border-r-4 border-white rounded-tr-lg"></div>
-                        <div className="absolute bottom-0 left-0 w-6 h-6 border-b-4 border-l-4 border-white rounded-bl-lg"></div>
-                        <div className="absolute bottom-0 right-0 w-6 h-6 border-b-4 border-r-4 border-white rounded-br-lg"></div>
+                  {/* Loading Screen - Show when processing */}
+                  {isProcessing ? (
+                    <div className="flex-1 bg-gray-50 rounded-lg flex items-center justify-center min-h-[50vh]">
+                      <div className="text-center py-8 px-4">
+                        <div className="animate-spin rounded-full h-20 w-20 border-b-4 border-green-600 mx-auto mb-6" />
+                        <p className="text-gray-700 text-xl font-semibold mb-2">{processingMessage || 'Processing Emirates ID... This may take 30-60 seconds.'}</p>
+                        <p className="text-sm text-gray-500">Please wait, the OCR process is analyzing your document</p>
                       </div>
-                      
-                      {/* Detection status - positioned above the frame */}
-                      {isDetecting && (
-                        <div className="absolute top-[calc(50%-15vh)] sm:top-[calc(50%-18vh)] left-1/2 transform -translate-x-1/2 z-20 w-[90%] sm:w-auto max-w-md">
-                          <div className={`px-3 sm:px-4 md:px-6 py-2 sm:py-3 md:py-4 rounded-lg text-white text-sm sm:text-base md:text-lg font-bold shadow-lg text-center ${
-                            detectionReady 
-                              ? 'bg-green-600 animate-pulse' 
-                              : detectedPoints 
-                                ? 'bg-yellow-600' 
-                                : 'bg-blue-600'
-                          }`}>
-                            {detectionReady 
-                              ? '✓ Ready! Capturing...' 
-                              : detectedPoints 
-                                ? `Hold steady... ${!isMobile ? `(Blur: ${lastBlurScore.toFixed(0)})` : ''}` 
-                                : 'Position ID card in the centered frame'}
-                          </div>
-                        </div>
-                      )}
                     </div>
                   ) : (
+                    <>
+                      {/* Camera View - Full Screen */}
+                      {!cameraError ? (
+                        <div className="relative bg-black rounded-lg overflow-hidden flex-1 min-h-[40vh] sm:min-h-[50vh] flex items-center justify-center">
+                          <Webcam
+                            ref={webcamRef}
+                            audio={false}
+                            screenshotFormat="image/jpeg"
+                            screenshotQuality={isMobile ? 0.85 : 0.95}
+                            className="w-full h-full object-contain"
+                            videoConstraints={{
+                              width: isMobile ? { ideal: 1280, max: 1920 } : { ideal: 1920 },
+                              height: isMobile ? { ideal: 720, max: 1080 } : { ideal: 1080 },
+                              facingMode: 'environment',
+                              aspectRatio: { ideal: 16/9 }
+                            }}
+                            onUserMedia={(_stream) => {
+                              console.log('✅ Back camera loaded in modal')
+                              setCameraError(null)
+                              setError(null)
+                              setTimeout(() => {
+                                if (webcamRef.current?.video) {
+                                  videoRef.current = webcamRef.current.video
+                                  if (opencvLoaded && modalSide === 'back') {
+                                    console.log('🎬 Starting back detection in modal')
+                                    setCurrentSide('back')
+                                    startAutoDetection('back')
+                                  }
+                                }
+                              }, 500)
+                            }}
+                            onUserMediaError={(err) => {
+                              console.error('❌ Back camera error in modal:', err)
+                              // Request permission again with better error handling
+                              requestCameraPermission().catch(() => {
+                                // Error already handled in requestCameraPermission
+                              })
+                            }}
+                            forceScreenshotSourceSize={true}
+                          />
+                          
+                          {/* Detection overlay canvas */}
+                          <canvas
+                            ref={canvasRef}
+                            className="absolute inset-0 w-full h-full pointer-events-none"
+                            style={{ zIndex: 10 }}
+                          />
+                          
+                          {/* Guide frame - smaller, centered frame for better focus */}
+                          <div className={`absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-[70%] sm:w-[65%] md:w-[60%] aspect-[85.6/53.98] border-[3px] sm:border-4 border-dashed rounded-lg pointer-events-none transition-all duration-300 ${
+                            detectionReady 
+                              ? 'border-green-500 bg-green-500 bg-opacity-20 shadow-lg shadow-green-500/50' 
+                              : detectedPoints 
+                                ? 'border-yellow-400 bg-yellow-400 bg-opacity-10' 
+                                : 'border-gray-300'
+                          }`} 
+                          style={{ 
+                            maxWidth: isMobile ? '320px' : '400px',
+                            maxHeight: isMobile ? '200px' : '250px'
+                          }} />
+                          
+                          {/* Corner guides for better alignment */}
+                          <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-[70%] sm:w-[65%] md:w-[60%] aspect-[85.6/53.98] pointer-events-none"
+                            style={{ 
+                              maxWidth: isMobile ? '320px' : '400px',
+                              maxHeight: isMobile ? '200px' : '250px'
+                            }}>
+                            {/* Corner markers */}
+                            <div className="absolute top-0 left-0 w-6 h-6 border-t-4 border-l-4 border-white rounded-tl-lg"></div>
+                            <div className="absolute top-0 right-0 w-6 h-6 border-t-4 border-r-4 border-white rounded-tr-lg"></div>
+                            <div className="absolute bottom-0 left-0 w-6 h-6 border-b-4 border-l-4 border-white rounded-bl-lg"></div>
+                            <div className="absolute bottom-0 right-0 w-6 h-6 border-b-4 border-r-4 border-white rounded-br-lg"></div>
+                          </div>
+                          
+                          {/* Detection status - positioned above the frame */}
+                          {isDetecting && (
+                            <div className="absolute top-[calc(50%-15vh)] sm:top-[calc(50%-18vh)] left-1/2 transform -translate-x-1/2 z-20 w-[90%] sm:w-auto max-w-md">
+                              <div className={`px-3 sm:px-4 md:px-6 py-2 sm:py-3 md:py-4 rounded-lg text-white text-sm sm:text-base md:text-lg font-bold shadow-lg text-center ${
+                                detectionReady 
+                                  ? 'bg-green-600 animate-pulse' 
+                                  : detectedPoints 
+                                    ? 'bg-yellow-600' 
+                                    : 'bg-blue-600'
+                              }`}>
+                                {detectionReady 
+                                  ? '✓ Ready! Capturing...' 
+                                  : detectedPoints 
+                                    ? `Hold steady... ${!isMobile ? `(Blur: ${lastBlurScore.toFixed(0)})` : ''}` 
+                                    : 'Position ID card in the centered frame'}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      ) : (
                     <div className="flex-1 bg-gray-100 rounded-lg p-8 text-center flex items-center justify-center min-h-[50vh]">
                       <div>
                         <Camera className="w-20 h-20 text-gray-400 mx-auto mb-4" />
@@ -1662,15 +1688,6 @@ export default function Step2EmiratesIDScan({ onComplete, onBack, service }: Ste
                           <span className="btn-secondary inline-block">📁 Choose File</span>
                         </label>
                       </div>
-                    </div>
-                  )}
-
-                  {/* Processing indicator */}
-                  {isProcessing && (
-                    <div className="text-center py-6">
-                      <div className="animate-spin rounded-full h-16 w-16 border-b-4 border-green-600 mx-auto mb-4" />
-                      <p className="text-gray-600 text-lg font-semibold">{processingMessage || 'Processing Emirates ID... This may take 30-60 seconds.'}</p>
-                      <p className="text-sm text-gray-500 mt-2">Please wait, the OCR process is analyzing your document</p>
                     </div>
                   )}
 
@@ -1828,14 +1845,6 @@ export default function Step2EmiratesIDScan({ onComplete, onBack, service }: Ste
               )}
             </div>
           </div>
-        </div>
-      )}
-
-      {/* Success Messages */}
-      {successMessage && (
-        <div className="bg-green-50 border-l-4 border-green-500 p-4 rounded-lg flex items-start gap-2">
-          <CheckCircle className="w-5 h-5 text-green-500 flex-shrink-0 mt-0.5" />
-          <p className="text-green-700 font-semibold">{successMessage}</p>
         </div>
       )}
 
