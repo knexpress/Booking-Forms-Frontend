@@ -41,6 +41,7 @@ export default function Step2EmiratesIDScan({ onComplete, onBack, service }: Ste
   const [philippinesIdBack, setPhilippinesIdBack] = useState<string | null>(null)
   const [isProcessing, setIsProcessing] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [successMessage, setSuccessMessage] = useState<string | null>(null)
   const [_eidData, setEidData] = useState<any>(null)
   const [processingMessage, setProcessingMessage] = useState<string>('Processing Emirates ID data...')
   const [cameraError, setCameraError] = useState<string | null>(null)
@@ -412,25 +413,50 @@ export default function Step2EmiratesIDScan({ onComplete, onBack, service }: Ste
       
       // Check if it's an Emirates ID
       if (!validationResult.isEmiratesID) {
-        throw new Error(
+        // Close modal immediately and show error message
+        setIsProcessing(false)
+        setCurrentSide(null)
+        setModalOpen(false)
+        setModalSide(null)
+        stopAutoDetection()
+        
+        // Show error message asking to retry
+        setError(
           validationResult.message || 
-          'This does not appear to be an Emirates ID card. Please ensure you are scanning a valid Emirates ID.'
+          'This does not appear to be an Emirates ID card. Please try again with a valid Emirates ID.'
         )
+        return // Exit early, don't throw error
       }
       
       // Check if the detected side matches what we're trying to capture
       if (captureSide === 'front' && validationResult.side !== 'front') {
-        throw new Error(
+        // Close modal and show error
+        setIsProcessing(false)
+        setCurrentSide(null)
+        setModalOpen(false)
+        setModalSide(null)
+        stopAutoDetection()
+        
+        setError(
           validationResult.message || 
-          'Please scan the front side of your Emirates ID.'
+          'Please scan the front side of your Emirates ID. Please try again.'
         )
+        return
       }
       
       if (captureSide === 'back' && validationResult.side !== 'back') {
-        throw new Error(
+        // Close modal and show error
+        setIsProcessing(false)
+        setCurrentSide(null)
+        setModalOpen(false)
+        setModalSide(null)
+        stopAutoDetection()
+        
+        setError(
           validationResult.message || 
-          'Please scan the back side of your Emirates ID.'
+          'Please scan the back side of your Emirates ID. Please try again.'
         )
+        return
       }
       
       console.log('✅ Emirates ID validation passed', { 
@@ -463,19 +489,38 @@ export default function Step2EmiratesIDScan({ onComplete, onBack, service }: Ste
       
       setIsProcessing(false)
       setCurrentSide(null)
-      console.log('✅ State updated - capture complete!')
+      setError(null) // Clear any previous errors
       
-      // Close modal after successful capture (with delay to show success message)
-      // Use setTimeout to access current state
+      // Show success message
+      if (captureSide === 'front') {
+        setSuccessMessage('UAE ID Front verified successfully!')
+        console.log('✅ UAE ID Front verified successfully!')
+      } else {
+        setSuccessMessage('UAE ID Back verified successfully!')
+        console.log('✅ UAE ID Back verified successfully!')
+      }
+      
+      // Close modal immediately after successful capture
+      setModalOpen(false)
+      setModalSide(null)
+      stopAutoDetection()
+      
+      // Clear success message after 3 seconds
       setTimeout(() => {
-        setModalOpen(false)
-        setModalSide(null)
-        stopAutoDetection()
-      }, 1500) // Wait 1.5 seconds to show success message
+        setSuccessMessage(null)
+      }, 3000)
     } catch (err) {
       console.error('Auto-capture error:', err)
-      setError(err instanceof Error ? err.message : 'Failed to capture document. Please try again.')
+      // Close modal on error
       setIsProcessing(false)
+      setCurrentSide(null)
+      setModalOpen(false)
+      setModalSide(null)
+      stopAutoDetection()
+      
+      // Show error message asking to retry
+      setError(err instanceof Error ? err.message : 'Failed to capture document. Please try again.')
+      
       // Reset capture flag on error to allow retry
       captureTriggeredRef.current = false
     }
@@ -817,33 +862,47 @@ export default function Step2EmiratesIDScan({ onComplete, onBack, service }: Ste
         
         // Check if it's an Emirates ID
         if (!validationResult.isEmiratesID) {
-          throw new Error(
+          // Close modal and show error message asking to retry
+          setIsProcessing(false)
+          setCurrentSide(null)
+          setError(
             validationResult.message || 
-            'This does not appear to be an Emirates ID card. Please ensure you are uploading a valid Emirates ID.'
+            'This does not appear to be an Emirates ID card. Please try again with a valid Emirates ID.'
           )
+          return // Exit early, don't throw error
         }
         
         // Check if the detected side matches what we're trying to upload
         if (side === 'front' && validationResult.side !== 'front') {
-          throw new Error(
+          setIsProcessing(false)
+          setCurrentSide(null)
+          setError(
             validationResult.message || 
-            'Please upload the front side of your Emirates ID.'
+            'Please upload the front side of your Emirates ID. Please try again.'
           )
+          return
         }
         
         if (side === 'back' && validationResult.side !== 'back') {
-          throw new Error(
+          setIsProcessing(false)
+          setCurrentSide(null)
+          setError(
             validationResult.message || 
-            'Please upload the back side of your Emirates ID.'
+            'Please upload the back side of your Emirates ID. Please try again.'
           )
+          return
         }
         
         // Store the cropped image (or full image if cropping failed)
         if (side === 'front') {
           setFrontImage(croppedImage)
           setEidData({ captured: true, mode: 'BACKEND-OCR' })
+          setSuccessMessage('UAE ID Front verified successfully!')
+          console.log('✅ UAE ID Front verified successfully!')
         } else {
           setBackImage(croppedImage)
+          setSuccessMessage('UAE ID Back verified successfully!')
+          console.log('✅ UAE ID Back verified successfully!')
         }
         
         // If front side detected and back side is required, show message
@@ -853,6 +912,12 @@ export default function Step2EmiratesIDScan({ onComplete, onBack, service }: Ste
         
         setIsProcessing(false)
         setCurrentSide(null)
+        setError(null) // Clear any previous errors
+        
+        // Clear success message after 3 seconds
+        setTimeout(() => {
+          setSuccessMessage(null)
+        }, 3000)
       } catch (err) {
         console.error('File processing error:', err)
         setError(err instanceof Error ? err.message : 'Failed to process image')
@@ -1763,6 +1828,14 @@ export default function Step2EmiratesIDScan({ onComplete, onBack, service }: Ste
               )}
             </div>
           </div>
+        </div>
+      )}
+
+      {/* Success Messages */}
+      {successMessage && (
+        <div className="bg-green-50 border-l-4 border-green-500 p-4 rounded-lg flex items-start gap-2">
+          <CheckCircle className="w-5 h-5 text-green-500 flex-shrink-0 mt-0.5" />
+          <p className="text-green-700 font-semibold">{successMessage}</p>
         </div>
       )}
 
