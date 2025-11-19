@@ -1439,6 +1439,8 @@ export default function Step2EmiratesIDScan({ onComplete, onBack, service }: Ste
                         </label>
                       </div>
                     </div>
+                      )}
+                    </>
                   )}
 
                   {/* Cancel button only */}
@@ -1689,6 +1691,8 @@ export default function Step2EmiratesIDScan({ onComplete, onBack, service }: Ste
                         </label>
                       </div>
                     </div>
+                      )}
+                    </>
                   )}
 
                   {/* Cancel button only */}
