@@ -1,8 +1,9 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
+import { consoleToTerminal } from './vite-plugin-console-terminal'
 
 export default defineConfig({
-  plugins: [react()],
+  plugins: [react(), consoleToTerminal()],
   optimizeDeps: {
     include: ['jspdf']
   },

@@ -115,8 +115,8 @@ export async function validateIsEmiratesID(
     // Determine if it's an Emirates ID
     const isEmiratesID = hasEmiratesIDPattern || (hasCardCharacteristics && confidence >= 0.5)
 
-    // Minimum confidence threshold
-    const minConfidence = side === 'front' ? 0.5 : 0.4
+    // Minimum confidence threshold - much lower for easier validation
+    const minConfidence = side === 'front' ? 0.3 : 0.2
     const isValid = isEmiratesID && confidence >= minConfidence
 
     console.log(`📊 Validation result for ${side} side:`, {

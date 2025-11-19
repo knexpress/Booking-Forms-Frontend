@@ -61,10 +61,10 @@ export default function Step2EmiratesIDScan({ onComplete, onBack, service }: Ste
   // Detect if device is mobile
   const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent) || window.innerWidth < 768
   
-  // Minimum blur score threshold - much lower for easier capture
-  const MIN_BLUR_SCORE = isMobile ? 30 : 50
-  // Stability duration in milliseconds - much shorter for easier capture
-  const STABILITY_DURATION = isMobile ? 500 : 700
+  // Minimum blur score threshold - very low for easier detection
+  const MIN_BLUR_SCORE = isMobile ? 15 : 25
+  // Stability duration in milliseconds - very short for easier capture
+  const STABILITY_DURATION = isMobile ? 300 : 400
   
   // Ref to track if capture has been triggered (persists across renders)
   const captureTriggeredRef = useRef(false)
@@ -464,15 +464,15 @@ export default function Step2EmiratesIDScan({ onComplete, onBack, service }: Ste
         // Update blur score
         setLastBlurScore(blurScore)
 
-        // Check if document is detected - more lenient blur check (allow slightly blurry if detected)
+        // Check if document is detected - very lenient blur check (accept almost any blur if detected)
         // Back side might be harder to detect, so be even more lenient
         const isBackSide = currentSideValue === 'back'
-        const blurThreshold = isBackSide ? MIN_BLUR_SCORE * 0.5 : MIN_BLUR_SCORE
-        const isBlurAcceptable = blurScore >= blurThreshold || blurScore >= (blurThreshold * 0.5)
+        const blurThreshold = isBackSide ? MIN_BLUR_SCORE * 0.3 : MIN_BLUR_SCORE * 0.5
+        const isBlurAcceptable = blurScore >= blurThreshold || blurScore >= 10 // Accept very low blur scores
         if (detected && points && points.length >= 4 && isBlurAcceptable) {
           // Check if points are similar to last stable points (within threshold)
-          // Much more lenient threshold for easier capture, especially for back side
-          const stabilityThreshold = isBackSide ? (isMobile ? 60 : 50) : (isMobile ? 50 : 40)
+          // Very lenient threshold for easier capture, especially for back side
+          const stabilityThreshold = isBackSide ? (isMobile ? 100 : 80) : (isMobile ? 80 : 60)
           const pointsSimilar = lastStablePoints && points.length === lastStablePoints.length &&
             points.every((p, i) => {
               const lastP = lastStablePoints![i]
@@ -484,7 +484,7 @@ export default function Step2EmiratesIDScan({ onComplete, onBack, service }: Ste
           if (pointsSimilar && stableStart !== null) {
             // Points are stable, check duration
             // Back side needs even shorter stability duration
-            const requiredStability = isBackSide ? (STABILITY_DURATION * 0.7) : STABILITY_DURATION
+            const requiredStability = isBackSide ? (STABILITY_DURATION * 0.5) : (STABILITY_DURATION * 0.7)
             const stableDuration = Date.now() - stableStart
             
             if (stableDuration >= requiredStability) {
