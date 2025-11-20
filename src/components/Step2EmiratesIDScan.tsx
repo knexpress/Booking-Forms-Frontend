@@ -54,6 +54,7 @@ export default function Step2EmiratesIDScan({ onComplete, onBack, service }: Ste
   const [detectedPoints, setDetectedPoints] = useState<any[] | null>(null)
   const [_stabilityStartTime, setStabilityStartTime] = useState<number | null>(null)
   const [lastBlurScore, setLastBlurScore] = useState<number>(0)
+  const [remainingSeconds, setRemainingSeconds] = useState<number | null>(null)
   const [modalOpen, setModalOpen] = useState(false)
   const [modalSide, setModalSide] = useState<ScanSide>(null)
   
@@ -67,6 +68,14 @@ export default function Step2EmiratesIDScan({ onComplete, onBack, service }: Ste
   
   // Ref to track if capture has been triggered (persists across renders)
   const captureTriggeredRef = useRef(false)
+  // Ref to track detection start time for delay
+  const detectionStartTimeRef = useRef<number | null>(null)
+  // Ref to store the delay timeout
+  const captureDelayTimeoutRef = useRef<number | null>(null)
+  // Ref to track detection start time for delay
+  const detectionStartTimeRef = useRef<number | null>(null)
+  // Ref to store the delay timeout
+  const captureDelayTimeoutRef = useRef<number | null>(null)
   
   // Check if browser supports camera API
   const checkCameraSupport = (): { supported: boolean; error?: string } => {
@@ -276,10 +285,16 @@ export default function Step2EmiratesIDScan({ onComplete, onBack, service }: Ste
       clearTimeout(stabilityTimerRef.current)
       stabilityTimerRef.current = null
     }
+    if (captureDelayTimeoutRef.current) {
+      clearTimeout(captureDelayTimeoutRef.current)
+      captureDelayTimeoutRef.current = null
+    }
     setIsDetecting(false)
     setDetectionReady(false)
     setStabilityStartTime(null)
     setDetectedPoints(null)
+    setRemainingSeconds(null)
+    detectionStartTimeRef.current = null
   }, [])
 
   // Auto-capture document when conditions are met
@@ -567,9 +582,15 @@ export default function Step2EmiratesIDScan({ onComplete, onBack, service }: Ste
     setDetectionReady(false)
     setStabilityStartTime(null)
     setDetectedPoints(null)
+    setRemainingSeconds(null)
     
-    // Reset capture flag when starting new detection
+    // Reset capture flag and detection timer when starting new detection
     captureTriggeredRef.current = false
+    detectionStartTimeRef.current = null
+    if (captureDelayTimeoutRef.current) {
+      clearTimeout(captureDelayTimeoutRef.current)
+      captureDelayTimeoutRef.current = null
+    }
 
     const currentSideValue: 'front' | 'back' = sideToUse // Use the validated side
     
@@ -618,80 +639,126 @@ export default function Step2EmiratesIDScan({ onComplete, onBack, service }: Ste
         const blurThreshold = isBackSide ? MIN_BLUR_SCORE * 0.3 : MIN_BLUR_SCORE * 0.5
         const isBlurAcceptable = blurScore >= blurThreshold || blurScore >= 10 // Accept very low blur scores
         if (detected && points && points.length >= 4 && isBlurAcceptable) {
-          // Capture immediately when card is detected - no stability check needed since validator is good
-          if (!captureTriggeredRef.current) {
-                // Set flag immediately to prevent multiple captures
-                captureTriggeredRef.current = true
-                console.log('🔒 Capture flag set to prevent multiple captures')
-                
-                // Stop the detection interval FIRST before capturing
-                if (detectionIntervalRef.current) {
-                  clearInterval(detectionIntervalRef.current)
-                  detectionIntervalRef.current = null
-                  console.log('⏹️ Detection interval stopped')
-                }
-                
-                // Validate currentSideValue before capturing
-                if (!currentSideValue || (currentSideValue !== 'front' && currentSideValue !== 'back')) {
-                  console.error('❌ Invalid currentSideValue when ready to capture:', currentSideValue)
-                  setError('Invalid scan side. Please restart the scan.')
-                  captureTriggeredRef.current = false
-                  setIsDetecting(false)
-                  return
-                }
-                
-                // Capture the points and side in local variables FIRST (before any async operations)
-                const pointsToCapture = points.map(p => ({ x: p.x, y: p.y })) // Create deep copy
-                const sideToCapture: 'front' | 'back' = currentSideValue // Explicitly type it
-                const videoElement = videoRef.current
-                
-                console.log('🚀 ===== AUTO-CAPTURE TRIGGERED =====')
-                console.log('✅ Card detected - capturing immediately!', { 
-                  side: sideToCapture, 
-                  points: pointsToCapture.length,
-                  videoReady: !!videoElement,
-                  opencvReady: opencvLoaded,
-                  sideType: typeof sideToCapture,
-                  sideValue: sideToCapture
-                })
-                
-                // Validate side one more time before calling capture
-                if (sideToCapture !== 'front' && sideToCapture !== 'back') {
-                  console.error('❌ Side validation failed:', sideToCapture)
-                  setError('Invalid scan side detected. Please try again.')
-                  captureTriggeredRef.current = false
-                  setIsDetecting(false)
-                  return
-                }
-                
-                // CRITICAL: Update UI and trigger capture in the same synchronous block
-                setDetectionReady(true)
-                setDetectedPoints(points)
-                drawDetection(points, canvasRef.current, videoRef.current, true)
-                
-                // CRITICAL: Call capture function IMMEDIATELY - no delays, no wrapping
-                // The function is async, so it will execute in the background
-                // We don't await it because we want the UI to update immediately
-                const capturePromise = autoCaptureDocument(pointsToCapture, sideToCapture)
-                
-                // Handle the promise to catch any errors
-                capturePromise
-                  .then(() => {
-                    console.log('✅ Auto-capture promise resolved - image should be stored')
-                  })
-                  .catch(err => {
-                    console.error('❌ Auto-capture promise rejected:', err)
-                    // Reset flag on error so user can try again
-                    captureTriggeredRef.current = false
-                    setIsProcessing(false)
-                    setDetectionReady(false)
-                    setError(err instanceof Error ? err.message : 'Capture failed. Please try again.')
-                  })
-                
-                return // Exit early to prevent further processing
-              } else {
-                console.log('⏭️ Capture already triggered, skipping...')
-              }
+          // Track when card is first detected
+          const now = Date.now()
+          if (detectionStartTimeRef.current === null) {
+            detectionStartTimeRef.current = now
+            console.log('🔍 Card detected - starting 2 second delay...')
+          }
+          
+          // Show detection status
+          setDetectedPoints(points)
+          drawDetection(points, canvasRef.current, videoRef.current, false)
+          
+          // Check if 2 seconds have passed since detection
+          const timeSinceDetection = now - detectionStartTimeRef.current
+          const DELAY_DURATION = 2000 // 2 seconds
+          const remainingTime = Math.ceil((DELAY_DURATION - timeSinceDetection) / 1000)
+          
+          // Update remaining seconds for UI display
+          if (remainingTime > 0 && remainingTime <= 2) {
+            setRemainingSeconds(remainingTime)
+          } else {
+            setRemainingSeconds(null)
+          }
+          
+          if (timeSinceDetection >= DELAY_DURATION && !captureTriggeredRef.current) {
+            // Set flag immediately to prevent multiple captures
+            captureTriggeredRef.current = true
+            console.log('🔒 Capture flag set to prevent multiple captures')
+            
+            // Clear the delay timeout if it exists
+            if (captureDelayTimeoutRef.current) {
+              clearTimeout(captureDelayTimeoutRef.current)
+              captureDelayTimeoutRef.current = null
+            }
+            
+            // Stop the detection interval FIRST before capturing
+            if (detectionIntervalRef.current) {
+              clearInterval(detectionIntervalRef.current)
+              detectionIntervalRef.current = null
+              console.log('⏹️ Detection interval stopped')
+            }
+            
+            // Validate currentSideValue before capturing
+            if (!currentSideValue || (currentSideValue !== 'front' && currentSideValue !== 'back')) {
+              console.error('❌ Invalid currentSideValue when ready to capture:', currentSideValue)
+              setError('Invalid scan side. Please restart the scan.')
+              captureTriggeredRef.current = false
+              detectionStartTimeRef.current = null
+              setIsDetecting(false)
+              return
+            }
+            
+            // Capture the points and side in local variables FIRST (before any async operations)
+            const pointsToCapture = points.map(p => ({ x: p.x, y: p.y })) // Create deep copy
+            const sideToCapture: 'front' | 'back' = currentSideValue // Explicitly type it
+            const videoElement = videoRef.current
+            
+            console.log('🚀 ===== AUTO-CAPTURE TRIGGERED =====')
+            console.log('✅ Card detected - capturing after 2 second delay!', { 
+              side: sideToCapture, 
+              points: pointsToCapture.length,
+              videoReady: !!videoElement,
+              opencvReady: opencvLoaded,
+              sideType: typeof sideToCapture,
+              sideValue: sideToCapture
+            })
+            
+            // Validate side one more time before calling capture
+            if (sideToCapture !== 'front' && sideToCapture !== 'back') {
+              console.error('❌ Side validation failed:', sideToCapture)
+              setError('Invalid scan side detected. Please try again.')
+              captureTriggeredRef.current = false
+              detectionStartTimeRef.current = null
+              setIsDetecting(false)
+              return
+            }
+            
+            // CRITICAL: Update UI and trigger capture
+            setDetectionReady(true)
+            setDetectedPoints(points)
+            drawDetection(points, canvasRef.current, videoRef.current, true)
+            
+            // Call capture function after delay
+            const capturePromise = autoCaptureDocument(pointsToCapture, sideToCapture)
+            
+            // Handle the promise to catch any errors
+            capturePromise
+              .then(() => {
+                console.log('✅ Auto-capture promise resolved - image should be stored')
+              })
+              .catch(err => {
+                console.error('❌ Auto-capture promise rejected:', err)
+                // Reset flag on error so user can try again
+                captureTriggeredRef.current = false
+                detectionStartTimeRef.current = null
+                setIsProcessing(false)
+                setDetectionReady(false)
+                setError(err instanceof Error ? err.message : 'Capture failed. Please try again.')
+              })
+            
+            return // Exit early to prevent further processing
+          } else if (!captureTriggeredRef.current) {
+            // Still in delay period - show countdown
+            setDetectionReady(false) // Not ready yet, still counting down
+            console.log(`⏳ Waiting... ${remainingTime} second(s) remaining`)
+          }
+        } else {
+          // Card not detected or moved out of frame - reset detection timer
+          if (detectionStartTimeRef.current !== null) {
+            console.log('🔄 Card moved out of frame - resetting detection timer')
+            detectionStartTimeRef.current = null
+          }
+          if (captureDelayTimeoutRef.current) {
+            clearTimeout(captureDelayTimeoutRef.current)
+            captureDelayTimeoutRef.current = null
+          }
+          setDetectionReady(false)
+          setRemainingSeconds(null)
+          setDetectedPoints(null)
+          drawDetection(null, canvasRef.current, videoRef.current, false)
+        }
         } else {
           // Document not detected or conditions not met - clear detection
           setDetectionReady(false)
@@ -1382,7 +1449,9 @@ export default function Step2EmiratesIDScan({ onComplete, onBack, service }: Ste
                                 {detectionReady 
                                   ? '✓ Detected! Capturing...' 
                                   : detectedPoints 
-                                    ? `Card detected! Capturing... ${!isMobile ? `(Blur: ${lastBlurScore.toFixed(0)})` : ''}` 
+                                    ? remainingSeconds !== null && remainingSeconds > 0
+                                      ? `Card detected! Capturing in ${remainingSeconds}...`
+                                      : `Card detected! Capturing... ${!isMobile ? `(Blur: ${lastBlurScore.toFixed(0)})` : ''}`
                                     : 'Position ID card in the centered frame'}
                               </div>
                             </div>
@@ -1634,7 +1703,9 @@ export default function Step2EmiratesIDScan({ onComplete, onBack, service }: Ste
                                 {detectionReady 
                                   ? '✓ Detected! Capturing...' 
                                   : detectedPoints 
-                                    ? `Card detected! Capturing... ${!isMobile ? `(Blur: ${lastBlurScore.toFixed(0)})` : ''}` 
+                                    ? remainingSeconds !== null && remainingSeconds > 0
+                                      ? `Card detected! Capturing in ${remainingSeconds}...`
+                                      : `Card detected! Capturing... ${!isMobile ? `(Blur: ${lastBlurScore.toFixed(0)})` : ''}`
                                     : 'Position ID card in the centered frame'}
                               </div>
                             </div>
