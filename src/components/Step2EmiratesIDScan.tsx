@@ -243,9 +243,9 @@ export default function Step2EmiratesIDScan({ onComplete, onBack, service }: Ste
       return false
     }
 
-    // Add a margin (e.g., 5% of frame size) to ensure card isn't cut off at edges
-    const marginX = videoWidth * 0.05
-    const marginY = videoHeight * 0.05
+    // Add a small margin (2% of frame size) to ensure card isn't cut off at edges
+    const marginX = videoWidth * 0.02
+    const marginY = videoHeight * 0.02
 
     // Check if all points are within the frame with margin
     for (const point of points) {
@@ -660,25 +660,49 @@ export default function Step2EmiratesIDScan({ onComplete, onBack, service }: Ste
         // Check if document is detected - very lenient blur check (accept almost any blur if detected)
         // Back side might be harder to detect, so be even more lenient
         const isBackSide = currentSideValue === 'back'
-        const blurThreshold = isBackSide ? MIN_BLUR_SCORE * 0.3 : MIN_BLUR_SCORE * 0.5
-        const isBlurAcceptable = blurScore >= blurThreshold || blurScore >= 10 // Accept very low blur scores
+        const blurThreshold = isBackSide ? MIN_BLUR_SCORE * 0.2 : MIN_BLUR_SCORE * 0.3
+        const isBlurAcceptable = blurScore >= blurThreshold || blurScore >= 5 // Accept very low blur scores
         
-        // Check if card is completely visible
+        // Debug logging
+        if (detected && points && points.length >= 4) {
+          console.log('📋 Detection result:', {
+            detected,
+            pointsCount: points.length,
+            blurScore: blurScore.toFixed(2),
+            blurThreshold: blurThreshold.toFixed(2),
+            isBlurAcceptable,
+            side: currentSideValue
+          })
+        }
+        
+        // Show detection even if card is partially visible (for user feedback)
+        // But only start countdown if fully visible
         const cardFullyVisible = videoRef.current && points && points.length >= 4 
           ? isCardFullyVisible(points, videoRef.current)
           : false
         
+        // Show detection status even if partially visible (for user feedback)
+        if (detected && points && points.length >= 4 && isBlurAcceptable) {
+          setDetectedPoints(points)
+          drawDetection(points, canvasRef.current, videoRef.current, false)
+          
+          // Log visibility status
+          if (videoRef.current) {
+            const visible = isCardFullyVisible(points, videoRef.current)
+            if (!visible) {
+              console.log('⚠️ Card detected but not fully visible - adjust position')
+            }
+          }
+        }
+        
+        // Only start countdown if card is fully visible
         if (detected && points && points.length >= 4 && isBlurAcceptable && cardFullyVisible) {
           // Track when card is first detected and fully visible
           const now = Date.now()
           if (detectionStartTimeRef.current === null) {
             detectionStartTimeRef.current = now
-            console.log('🔍 Card detected and fully visible - starting 2 second delay...')
+            console.log('✅ Card detected and fully visible - starting 2 second delay...')
           }
-          
-          // Show detection status
-          setDetectedPoints(points)
-          drawDetection(points, canvasRef.current, videoRef.current, false)
           
           // Check if 2 seconds have passed since detection
           const timeSinceDetection = now - detectionStartTimeRef.current
@@ -774,14 +798,10 @@ export default function Step2EmiratesIDScan({ onComplete, onBack, service }: Ste
             setDetectionReady(false) // Not ready yet, still counting down
             console.log(`⏳ Waiting... ${remainingTime} second(s) remaining`)
           }
-        } else {
-          // Card not detected, not fully visible, or moved out of frame - reset detection timer
+        } else if (!detected || !points || points.length < 4 || !isBlurAcceptable) {
+          // Card not detected or conditions not met - clear everything
           if (detectionStartTimeRef.current !== null) {
-            if (!cardFullyVisible && detected && points && points.length >= 4) {
-              console.log('🔄 Card detected but not fully visible - resetting detection timer')
-            } else {
-              console.log('🔄 Card moved out of frame - resetting detection timer')
-            }
+            console.log('🔄 Card lost - resetting detection timer')
             detectionStartTimeRef.current = null
           }
           if (captureDelayTimeoutRef.current) {
@@ -792,6 +812,20 @@ export default function Step2EmiratesIDScan({ onComplete, onBack, service }: Ste
           setRemainingSeconds(null)
           setDetectedPoints(null)
           drawDetection(null, canvasRef.current, videoRef.current, false)
+        } else if (detected && points && points.length >= 4 && isBlurAcceptable && !cardFullyVisible) {
+          // Card detected but not fully visible - show detection but don't start countdown
+          if (detectionStartTimeRef.current !== null) {
+            console.log('🔄 Card detected but not fully visible - resetting detection timer')
+            detectionStartTimeRef.current = null
+          }
+          if (captureDelayTimeoutRef.current) {
+            clearTimeout(captureDelayTimeoutRef.current)
+            captureDelayTimeoutRef.current = null
+          }
+          setDetectionReady(false)
+          setRemainingSeconds(null)
+          // Keep showing detected points so user knows it's being detected
+          // setDetectedPoints and drawDetection already called above
         }
       } catch (error) {
         console.error('Detection error:', error)
