@@ -376,11 +376,11 @@ export default function Step2EmiratesIDScan({ onComplete, onBack, service }: Ste
       console.log('✅ Document cropped successfully', { width: croppedMat.cols, height: croppedMat.rows })
 
       console.log('📸 Step 3: Converting cropped image to base64...')
-      // Convert cropped image to base64
+      // Convert cropped image to base64 (for validation)
       const croppedBase64 = matToBase64(croppedMat, 'image/jpeg')
       
       console.log('📸 Step 4: Getting original screenshot from webcam...')
-      // Also get original screenshot for processing (fallback)
+      // Get original full screenshot for display (shows as-is)
       const originalScreenshot = webcamRef.current?.getScreenshot()
       console.log('✅ Screenshots obtained', { hasCropped: !!croppedBase64, hasOriginal: !!originalScreenshot })
 
@@ -392,27 +392,27 @@ export default function Step2EmiratesIDScan({ onComplete, onBack, service }: Ste
         throw new Error('Failed to convert cropped image to base64')
       }
       
+      // Use original screenshot for display, cropped for validation
+      const imageToDisplay = originalScreenshot || croppedBase64
       if (!originalScreenshot) {
-        // Use cropped image as fallback if screenshot fails
-        console.warn('⚠️ Original screenshot failed, using cropped image')
+        console.warn('⚠️ Original screenshot failed, using cropped image for display')
       }
 
       console.log('📸 Step 5: Storing captured images...')
       
-      // IMPORTANT: Store images immediately
-      // Store cropped image first (this is the main captured image)
+      // IMPORTANT: Store full screenshot for display (as-is), cropped for validation
+      // Store cropped image for validation/processing
       if (captureSide === 'front') {
-        console.log('💾 Storing front cropped image...')
-        setFrontCroppedImage(croppedBase64)
-        console.log('✅ Front cropped image stored in state')
+        console.log('💾 Storing front images...')
+        setFrontCroppedImage(croppedBase64) // For validation
+        console.log('✅ Front images stored in state')
       } else {
-        console.log('💾 Storing back cropped image...')
-        setBackCroppedImage(croppedBase64)
-        console.log('✅ Back cropped image stored in state')
+        console.log('💾 Storing back images...')
+        setBackCroppedImage(croppedBase64) // For validation
+        console.log('✅ Back images stored in state')
       }
 
-      // IMPORTANT: Always use cropped image for storage and processing
-      // The cropped image contains only the ID card frame, not the whole camera view
+      // Store full screenshot for display (shows exactly as captured)
 
       console.log('📸 Step 6: Validating Emirates ID with backend API...', { side: captureSide })
       setProcessingMessage('Processing Emirates ID... This may take 30-60 seconds.')
@@ -490,18 +490,18 @@ export default function Step2EmiratesIDScan({ onComplete, onBack, service }: Ste
         requiresBackSide: validationResult.requiresBackSide
       })
 
-      console.log('📸 Step 7: Storing CROPPED image...', { side: captureSide })
+      console.log('📸 Step 7: Storing images...', { side: captureSide })
       
-      // Store the cropped image
+      // Store the full screenshot for display (as-is), cropped was already stored for validation
       if (captureSide === 'front') {
-        console.log('💾 Storing front CROPPED image...')
-        setFrontImage(croppedBase64)
+        console.log('💾 Storing front image (full screenshot)...')
+        setFrontImage(imageToDisplay) // Store full screenshot for display
         setEidData({ captured: true, mode: 'BACKEND-OCR' })
-        console.log('✅ Front cropped image stored in state')
+        console.log('✅ Front image stored in state')
       } else if (captureSide === 'back') {
-        console.log('💾 Storing back CROPPED image...')
-        setBackImage(croppedBase64)
-        console.log('✅ Back cropped image stored in state')
+        console.log('💾 Storing back image (full screenshot)...')
+        setBackImage(imageToDisplay) // Store full screenshot for display
+        console.log('✅ Back image stored in state')
       }
       
       // If front side detected and back side is required, show message
