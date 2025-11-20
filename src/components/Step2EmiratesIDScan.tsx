@@ -62,8 +62,8 @@ export default function Step2EmiratesIDScan({ onComplete, onBack, service }: Ste
   
   // Minimum blur score threshold - very low for easier detection
   const MIN_BLUR_SCORE = isMobile ? 15 : 25
-  // Stability duration in milliseconds - very short for easier capture
-  const STABILITY_DURATION = isMobile ? 300 : 400
+  // Stability duration in milliseconds - capture immediately when detected
+  const STABILITY_DURATION = 0 // Capture immediately when card is detected
   
   // Ref to track if capture has been triggered (persists across renders)
   const captureTriggeredRef = useRef(false)
@@ -571,8 +571,6 @@ export default function Step2EmiratesIDScan({ onComplete, onBack, service }: Ste
     // Reset capture flag when starting new detection
     captureTriggeredRef.current = false
 
-    let lastStablePoints: any[] | null = null
-    let stableStart: number | null = null
     const currentSideValue: 'front' | 'back' = sideToUse // Use the validated side
     
     console.log('🔍 Starting auto-detection for side:', currentSideValue)
@@ -604,8 +602,6 @@ export default function Step2EmiratesIDScan({ onComplete, onBack, service }: Ste
         
         if (!result) {
           setDetectionReady(false)
-          stableStart = null
-          lastStablePoints = null
           setDetectedPoints(null)
           drawDetection(null, canvasRef.current, videoRef.current, false)
           return
@@ -622,26 +618,8 @@ export default function Step2EmiratesIDScan({ onComplete, onBack, service }: Ste
         const blurThreshold = isBackSide ? MIN_BLUR_SCORE * 0.3 : MIN_BLUR_SCORE * 0.5
         const isBlurAcceptable = blurScore >= blurThreshold || blurScore >= 10 // Accept very low blur scores
         if (detected && points && points.length >= 4 && isBlurAcceptable) {
-          // Check if points are similar to last stable points (within threshold)
-          // Very lenient threshold for easier capture, especially for back side
-          const stabilityThreshold = isBackSide ? (isMobile ? 100 : 80) : (isMobile ? 80 : 60)
-          const pointsSimilar = lastStablePoints && points.length === lastStablePoints.length &&
-            points.every((p, i) => {
-              const lastP = lastStablePoints![i]
-              const dx = Math.abs(p.x - lastP.x)
-              const dy = Math.abs(p.y - lastP.y)
-              return dx < stabilityThreshold && dy < stabilityThreshold
-            })
-
-          if (pointsSimilar && stableStart !== null) {
-            // Points are stable, check duration
-            // Back side needs even shorter stability duration
-            const requiredStability = isBackSide ? (STABILITY_DURATION * 0.5) : (STABILITY_DURATION * 0.7)
-            const stableDuration = Date.now() - stableStart
-            
-            if (stableDuration >= requiredStability) {
-              // Document is stable and ready to capture - capture immediately
-              if (!captureTriggeredRef.current) {
+          // Capture immediately when card is detected - no stability check needed since validator is good
+          if (!captureTriggeredRef.current) {
                 // Set flag immediately to prevent multiple captures
                 captureTriggeredRef.current = true
                 console.log('🔒 Capture flag set to prevent multiple captures')
@@ -668,12 +646,11 @@ export default function Step2EmiratesIDScan({ onComplete, onBack, service }: Ste
                 const videoElement = videoRef.current
                 
                 console.log('🚀 ===== AUTO-CAPTURE TRIGGERED =====')
-                console.log('✅ Document stable for 1 second - capturing NOW!', { 
+                console.log('✅ Card detected - capturing immediately!', { 
                   side: sideToCapture, 
                   points: pointsToCapture.length,
                   videoReady: !!videoElement,
                   opencvReady: opencvLoaded,
-                  stableDuration: `${stableDuration}ms`,
                   sideType: typeof sideToCapture,
                   sideValue: sideToCapture
                 })
@@ -715,24 +692,8 @@ export default function Step2EmiratesIDScan({ onComplete, onBack, service }: Ste
               } else {
                 console.log('⏭️ Capture already triggered, skipping...')
               }
-            } else {
-              // Still counting down - show progress but don't set ready yet
-              setDetectionReady(false)
-            }
-          } else {
-            // Points changed or first detection - reset stability timer
-            stableStart = Date.now()
-            lastStablePoints = points
-            setDetectionReady(false)
-            // Don't reset captureTriggeredRef here - it's handled by the ref system
-          }
-
-          setDetectedPoints(points)
-          drawDetection(points, canvasRef.current, videoRef.current, false)
         } else {
-          // Reset stability if conditions not met
-          stableStart = null
-          lastStablePoints = null
+          // Document not detected or conditions not met - clear detection
           setDetectionReady(false)
           setDetectedPoints(null)
           drawDetection(null, canvasRef.current, videoRef.current, false)
@@ -1197,7 +1158,7 @@ export default function Step2EmiratesIDScan({ onComplete, onBack, service }: Ste
         <ul className="text-xs sm:text-sm text-blue-700 space-y-1">
           <li>• Position your Emirates ID card within the frame</li>
           <li>• Ensure good lighting with no glare or shadows</li>
-          <li>• Keep the ID flat and hold it steady for 1 second</li>
+          <li>• Keep the ID flat - it will capture automatically when detected</li>
           <li>• The system will automatically detect and capture when ready (green overlay)</li>
           <li>• A yellow frame means detection is in progress</li>
           <li>• Avoid reflections and ensure all text is readable</li>
@@ -1317,10 +1278,10 @@ export default function Step2EmiratesIDScan({ onComplete, onBack, service }: Ste
                   {/* Instructions */}
                   <div className="bg-blue-50 border-l-4 border-blue-500 p-2 sm:p-3 rounded">
                     <p className="text-xs sm:text-sm text-blue-800 mb-2">
-                      <strong>Instructions:</strong> Hold your phone at a comfortable distance (about 30-40cm away) and position your Emirates ID card within the centered frame. The system will automatically detect and capture when ready.
+                      <strong>Instructions:</strong> Hold your phone at a comfortable distance (about 30-40cm away) and position your Emirates ID card within the centered frame. The system will automatically detect and capture immediately when the card is recognized.
                     </p>
                     <p className="text-xs text-blue-700">
-                      💡 Tip: Keep the card steady for half a second. Ensure good lighting and hold the card flat within the frame.
+                      💡 Tip: The system captures automatically as soon as it detects your ID card. Ensure good lighting and hold the card flat within the frame.
                     </p>
                   </div>
 
@@ -1382,8 +1343,8 @@ export default function Step2EmiratesIDScan({ onComplete, onBack, service }: Ste
                             style={{ zIndex: 10 }}
                           />
                           
-                          {/* Guide frame - smaller, centered frame for better focus */}
-                          <div className={`absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-[70%] sm:w-[65%] md:w-[60%] aspect-[85.6/53.98] border-[3px] sm:border-4 border-dashed rounded-lg pointer-events-none transition-all duration-300 ${
+                          {/* Guide frame - larger, centered frame for easier positioning */}
+                          <div className={`absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-[85%] sm:w-[80%] md:w-[75%] aspect-[85.6/53.98] border-[3px] sm:border-4 border-dashed rounded-lg pointer-events-none transition-all duration-300 ${
                             detectionReady 
                               ? 'border-green-500 bg-green-500 bg-opacity-20 shadow-lg shadow-green-500/50' 
                               : detectedPoints 
@@ -1391,15 +1352,15 @@ export default function Step2EmiratesIDScan({ onComplete, onBack, service }: Ste
                                 : 'border-gray-300'
                           }`} 
                           style={{ 
-                            maxWidth: isMobile ? '320px' : '400px',
-                            maxHeight: isMobile ? '200px' : '250px'
+                            maxWidth: isMobile ? '400px' : '500px',
+                            maxHeight: isMobile ? '250px' : '310px'
                           }} />
                           
                           {/* Corner guides for better alignment */}
-                          <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-[70%] sm:w-[65%] md:w-[60%] aspect-[85.6/53.98] pointer-events-none"
+                          <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-[85%] sm:w-[80%] md:w-[75%] aspect-[85.6/53.98] pointer-events-none"
                             style={{ 
-                              maxWidth: isMobile ? '320px' : '400px',
-                              maxHeight: isMobile ? '200px' : '250px'
+                              maxWidth: isMobile ? '400px' : '500px',
+                              maxHeight: isMobile ? '250px' : '310px'
                             }}>
                             {/* Corner markers */}
                             <div className="absolute top-0 left-0 w-6 h-6 border-t-4 border-l-4 border-white rounded-tl-lg"></div>
@@ -1419,9 +1380,9 @@ export default function Step2EmiratesIDScan({ onComplete, onBack, service }: Ste
                                     : 'bg-blue-600'
                               }`}>
                                 {detectionReady 
-                                  ? '✓ Ready! Capturing...' 
+                                  ? '✓ Detected! Capturing...' 
                                   : detectedPoints 
-                                    ? `Hold steady... ${!isMobile ? `(Blur: ${lastBlurScore.toFixed(0)})` : ''}` 
+                                    ? `Card detected! Capturing... ${!isMobile ? `(Blur: ${lastBlurScore.toFixed(0)})` : ''}` 
                                     : 'Position ID card in the centered frame'}
                               </div>
                             </div>
@@ -1569,10 +1530,10 @@ export default function Step2EmiratesIDScan({ onComplete, onBack, service }: Ste
                   {/* Instructions */}
                   <div className="bg-blue-50 border-l-4 border-blue-500 p-2 sm:p-3 rounded">
                     <p className="text-xs sm:text-sm text-blue-800 mb-2">
-                      <strong>Instructions:</strong> Hold your phone at a comfortable distance (about 30-40cm away) and position your Emirates ID card (back side) within the centered frame. The system will automatically detect and capture when ready.
+                      <strong>Instructions:</strong> Hold your phone at a comfortable distance (about 30-40cm away) and position your Emirates ID card (back side) within the centered frame. The system will automatically detect and capture immediately when the card is recognized.
                     </p>
                     <p className="text-xs text-blue-700">
-                      💡 Tip: Keep the card steady for half a second. Ensure good lighting and hold the card flat within the frame.
+                      💡 Tip: The system captures automatically as soon as it detects your ID card. Ensure good lighting and hold the card flat within the frame.
                     </p>
                   </div>
 
@@ -1634,8 +1595,8 @@ export default function Step2EmiratesIDScan({ onComplete, onBack, service }: Ste
                             style={{ zIndex: 10 }}
                           />
                           
-                          {/* Guide frame - smaller, centered frame for better focus */}
-                          <div className={`absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-[70%] sm:w-[65%] md:w-[60%] aspect-[85.6/53.98] border-[3px] sm:border-4 border-dashed rounded-lg pointer-events-none transition-all duration-300 ${
+                          {/* Guide frame - larger, centered frame for easier positioning */}
+                          <div className={`absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-[85%] sm:w-[80%] md:w-[75%] aspect-[85.6/53.98] border-[3px] sm:border-4 border-dashed rounded-lg pointer-events-none transition-all duration-300 ${
                             detectionReady 
                               ? 'border-green-500 bg-green-500 bg-opacity-20 shadow-lg shadow-green-500/50' 
                               : detectedPoints 
@@ -1643,15 +1604,15 @@ export default function Step2EmiratesIDScan({ onComplete, onBack, service }: Ste
                                 : 'border-gray-300'
                           }`} 
                           style={{ 
-                            maxWidth: isMobile ? '320px' : '400px',
-                            maxHeight: isMobile ? '200px' : '250px'
+                            maxWidth: isMobile ? '400px' : '500px',
+                            maxHeight: isMobile ? '250px' : '310px'
                           }} />
                           
                           {/* Corner guides for better alignment */}
-                          <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-[70%] sm:w-[65%] md:w-[60%] aspect-[85.6/53.98] pointer-events-none"
+                          <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-[85%] sm:w-[80%] md:w-[75%] aspect-[85.6/53.98] pointer-events-none"
                             style={{ 
-                              maxWidth: isMobile ? '320px' : '400px',
-                              maxHeight: isMobile ? '200px' : '250px'
+                              maxWidth: isMobile ? '400px' : '500px',
+                              maxHeight: isMobile ? '250px' : '310px'
                             }}>
                             {/* Corner markers */}
                             <div className="absolute top-0 left-0 w-6 h-6 border-t-4 border-l-4 border-white rounded-tl-lg"></div>
@@ -1671,9 +1632,9 @@ export default function Step2EmiratesIDScan({ onComplete, onBack, service }: Ste
                                     : 'bg-blue-600'
                               }`}>
                                 {detectionReady 
-                                  ? '✓ Ready! Capturing...' 
+                                  ? '✓ Detected! Capturing...' 
                                   : detectedPoints 
-                                    ? `Hold steady... ${!isMobile ? `(Blur: ${lastBlurScore.toFixed(0)})` : ''}` 
+                                    ? `Card detected! Capturing... ${!isMobile ? `(Blur: ${lastBlurScore.toFixed(0)})` : ''}` 
                                     : 'Position ID card in the centered frame'}
                               </div>
                             </div>
