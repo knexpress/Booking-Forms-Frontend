@@ -25,7 +25,6 @@ export default function Step3FaceScan({ onComplete, onBack, eidImage, eidBackIma
   const [isScanning, setIsScanning] = useState(false)
   const [isProcessing, setIsProcessing] = useState(false)
   const [faceImage, setFaceImage] = useState<string | null>(null)
-  const [faceImages, setFaceImages] = useState<string[]>([])
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState(false)
   const [_verificationResult, setVerificationResult] = useState<any>(null)
@@ -100,7 +99,6 @@ export default function Step3FaceScan({ onComplete, onBack, eidImage, eidBackIma
       const imageSrc = webcamRef.current.getScreenshot()
       if (imageSrc) {
         setFaceImage(imageSrc)
-        setFaceImages([imageSrc])
         setIsScanning(false)
         setCountdown(null)
         console.log('✅ Face image captured')
@@ -244,7 +242,6 @@ export default function Step3FaceScan({ onComplete, onBack, eidImage, eidBackIma
 
   const retake = () => {
     setFaceImage(null)
-    setFaceImages([])
     setSuccess(false)
     setError(null)
     setIsScanning(false)
@@ -443,4 +440,3 @@ export default function Step3FaceScan({ onComplete, onBack, eidImage, eidBackIma
     </div>
   )
 }
-
