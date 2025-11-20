@@ -53,7 +53,7 @@ export default function Step2EmiratesIDScan({ onComplete, onBack, service }: Ste
   const [detectionReady, setDetectionReady] = useState(false)
   const [detectedPoints, setDetectedPoints] = useState<any[] | null>(null)
   const [_stabilityStartTime, setStabilityStartTime] = useState<number | null>(null)
-  const [lastBlurScore, setLastBlurScore] = useState<number>(0)
+  const [_lastBlurScore, setLastBlurScore] = useState<number>(0)
   const [remainingSeconds, setRemainingSeconds] = useState<number | null>(null)
   const [modalOpen, setModalOpen] = useState(false)
   const [modalSide, setModalSide] = useState<ScanSide>(null)
@@ -230,33 +230,7 @@ export default function Step2EmiratesIDScan({ onComplete, onBack, service }: Ste
     }
   }
 
-  // Check if card is completely visible within the frame
-  const isCardFullyVisible = useCallback((points: any[], video: HTMLVideoElement): boolean => {
-    if (!points || points.length < 4 || !video) {
-      return false
-    }
 
-    const videoWidth = video.videoWidth || video.clientWidth
-    const videoHeight = video.videoHeight || video.clientHeight
-
-    if (videoWidth === 0 || videoHeight === 0) {
-      return false
-    }
-
-    // Add a small margin (2% of frame size) to ensure card isn't cut off at edges
-    const marginX = videoWidth * 0.02
-    const marginY = videoHeight * 0.02
-
-    // Check if all points are within the frame with margin
-    for (const point of points) {
-      if (point.x < marginX || point.x > videoWidth - marginX ||
-          point.y < marginY || point.y > videoHeight - marginY) {
-        return false
-      }
-    }
-
-    return true
-  }, [])
 
   // Draw detected rectangle on canvas
   const drawDetection = useCallback((points: any[] | null, canvas: HTMLCanvasElement, video: HTMLVideoElement, isReady: boolean = false) => {
@@ -581,11 +555,17 @@ export default function Step2EmiratesIDScan({ onComplete, onBack, service }: Ste
   // Start automatic detection
   // Accept side as parameter to avoid relying on state that might not be updated yet
   const startAutoDetection = useCallback((side?: 'front' | 'back') => {
-    if (!opencvLoaded || !videoRef.current || detectionIntervalRef.current) {
+    // Clear any existing detection interval first
+    if (detectionIntervalRef.current) {
+      clearInterval(detectionIntervalRef.current)
+      detectionIntervalRef.current = null
+      console.log('🔄 Cleared existing detection interval')
+    }
+    
+    if (!opencvLoaded || !videoRef.current) {
       console.warn('⚠️ Cannot start detection - missing requirements', {
         opencvLoaded,
-        video: !!videoRef.current,
-        interval: !!detectionIntervalRef.current
+        video: !!videoRef.current
       })
       return
     }
@@ -657,81 +637,22 @@ export default function Step2EmiratesIDScan({ onComplete, onBack, service }: Ste
         // Update blur score
         setLastBlurScore(blurScore)
 
-        // Check if document is detected - very lenient blur check (accept almost any blur if detected)
-        // Back side might be harder to detect, so be even more lenient
-        const isBackSide = currentSideValue === 'back'
-        const blurThreshold = isBackSide ? MIN_BLUR_SCORE * 0.2 : MIN_BLUR_SCORE * 0.3
-        const isBlurAcceptable = blurScore >= blurThreshold || blurScore >= 5 // Accept very low blur scores
-        
-        // Debug logging
+        // Simple detection - if card is detected, capture immediately
+        // No blur check, no delay, no complex validation - just detect and capture
         if (detected && points && points.length >= 4) {
-          console.log('📋 Detection result:', {
-            detected,
-            pointsCount: points.length,
-            blurScore: blurScore.toFixed(2),
-            blurThreshold: blurThreshold.toFixed(2),
-            isBlurAcceptable,
-            side: currentSideValue
-          })
-        }
-        
-        // Show detection even if card is partially visible (for user feedback)
-        // But only start countdown if fully visible
-        const cardFullyVisible = videoRef.current && points && points.length >= 4 
-          ? isCardFullyVisible(points, videoRef.current)
-          : false
-        
-        // Show detection status even if partially visible (for user feedback)
-        if (detected && points && points.length >= 4 && isBlurAcceptable) {
           setDetectedPoints(points)
-          drawDetection(points, canvasRef.current, videoRef.current, false)
+          drawDetection(points, canvasRef.current, videoRef.current, true)
           
-          // Log visibility status
-          if (videoRef.current) {
-            const visible = isCardFullyVisible(points, videoRef.current)
-            if (!visible) {
-              console.log('⚠️ Card detected but not fully visible - adjust position')
-            }
-          }
-        }
-        
-        // Only start countdown if card is fully visible
-        if (detected && points && points.length >= 4 && isBlurAcceptable && cardFullyVisible) {
-          // Track when card is first detected and fully visible
-          const now = Date.now()
-          if (detectionStartTimeRef.current === null) {
-            detectionStartTimeRef.current = now
-            console.log('✅ Card detected and fully visible - starting 2 second delay...')
-          }
-          
-          // Check if 2 seconds have passed since detection
-          const timeSinceDetection = now - detectionStartTimeRef.current
-          const DELAY_DURATION = 2000 // 2 seconds
-          const remainingTime = Math.ceil((DELAY_DURATION - timeSinceDetection) / 1000)
-          
-          // Update remaining seconds for UI display
-          if (remainingTime > 0 && remainingTime <= 2) {
-            setRemainingSeconds(remainingTime)
-          } else {
-            setRemainingSeconds(null)
-          }
-          
-          if (timeSinceDetection >= DELAY_DURATION && !captureTriggeredRef.current) {
+          // Capture immediately - no delay, no waiting
+          if (!captureTriggeredRef.current) {
             // Set flag immediately to prevent multiple captures
             captureTriggeredRef.current = true
-            console.log('🔒 Capture flag set to prevent multiple captures')
-            
-            // Clear the delay timeout if it exists
-            if (captureDelayTimeoutRef.current) {
-              clearTimeout(captureDelayTimeoutRef.current)
-              captureDelayTimeoutRef.current = null
-            }
+            console.log('✅ Card detected - capturing immediately!')
             
             // Stop the detection interval FIRST before capturing
             if (detectionIntervalRef.current) {
               clearInterval(detectionIntervalRef.current)
               detectionIntervalRef.current = null
-              console.log('⏹️ Detection interval stopped')
             }
             
             // Validate currentSideValue before capturing
@@ -750,7 +671,7 @@ export default function Step2EmiratesIDScan({ onComplete, onBack, service }: Ste
             const videoElement = videoRef.current
             
             console.log('🚀 ===== AUTO-CAPTURE TRIGGERED =====')
-            console.log('✅ Card detected - capturing after 2 second delay!', { 
+            console.log('✅ Card detected - capturing immediately!', { 
               side: sideToCapture, 
               points: pointsToCapture.length,
               videoReady: !!videoElement,
@@ -769,10 +690,8 @@ export default function Step2EmiratesIDScan({ onComplete, onBack, service }: Ste
               return
             }
             
-            // CRITICAL: Update UI and trigger capture
+            // Update UI and trigger capture immediately
             setDetectionReady(true)
-            setDetectedPoints(points)
-            drawDetection(points, canvasRef.current, videoRef.current, true)
             
             // Call capture function after delay
             const capturePromise = autoCaptureDocument(pointsToCapture, sideToCapture)
@@ -793,39 +712,12 @@ export default function Step2EmiratesIDScan({ onComplete, onBack, service }: Ste
               })
             
             return // Exit early to prevent further processing
-          } else if (!captureTriggeredRef.current) {
-            // Still in delay period - show countdown
-            setDetectionReady(false) // Not ready yet, still counting down
-            console.log(`⏳ Waiting... ${remainingTime} second(s) remaining`)
           }
-        } else if (!detected || !points || points.length < 4 || !isBlurAcceptable) {
-          // Card not detected or conditions not met - clear everything
-          if (detectionStartTimeRef.current !== null) {
-            console.log('🔄 Card lost - resetting detection timer')
-            detectionStartTimeRef.current = null
-          }
-          if (captureDelayTimeoutRef.current) {
-            clearTimeout(captureDelayTimeoutRef.current)
-            captureDelayTimeoutRef.current = null
-          }
+        } else {
+          // Card not detected - clear everything
           setDetectionReady(false)
-          setRemainingSeconds(null)
           setDetectedPoints(null)
           drawDetection(null, canvasRef.current, videoRef.current, false)
-        } else if (detected && points && points.length >= 4 && isBlurAcceptable && !cardFullyVisible) {
-          // Card detected but not fully visible - show detection but don't start countdown
-          if (detectionStartTimeRef.current !== null) {
-            console.log('🔄 Card detected but not fully visible - resetting detection timer')
-            detectionStartTimeRef.current = null
-          }
-          if (captureDelayTimeoutRef.current) {
-            clearTimeout(captureDelayTimeoutRef.current)
-            captureDelayTimeoutRef.current = null
-          }
-          setDetectionReady(false)
-          setRemainingSeconds(null)
-          // Keep showing detected points so user knows it's being detected
-          // setDetectedPoints and drawDetection already called above
         }
       } catch (error) {
         console.error('Detection error:', error)
@@ -1513,8 +1405,8 @@ export default function Step2EmiratesIDScan({ onComplete, onBack, service }: Ste
                                   : detectedPoints 
                                     ? remainingSeconds !== null && remainingSeconds > 0
                                       ? `Card detected! Capturing in ${remainingSeconds}...`
-                                      : `Card detected! Capturing... ${!isMobile ? `(Blur: ${lastBlurScore.toFixed(0)})` : ''}`
-                                    : 'Position ID card completely within the frame'}
+                                      : 'Card detected! Hold steady...'
+                                    : 'Position ID card in the frame'}
                               </div>
                             </div>
                           )}
@@ -1767,8 +1659,8 @@ export default function Step2EmiratesIDScan({ onComplete, onBack, service }: Ste
                                   : detectedPoints 
                                     ? remainingSeconds !== null && remainingSeconds > 0
                                       ? `Card detected! Capturing in ${remainingSeconds}...`
-                                      : `Card detected! Capturing... ${!isMobile ? `(Blur: ${lastBlurScore.toFixed(0)})` : ''}`
-                                    : 'Position ID card completely within the frame'}
+                                      : 'Card detected! Hold steady...'
+                                    : 'Position ID card in the frame'}
                               </div>
                             </div>
                           )}

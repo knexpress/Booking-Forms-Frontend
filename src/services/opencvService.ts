@@ -292,24 +292,63 @@ export function findDocumentContour(src: any): any[] | null {
     // Detect if device is mobile for adaptive parameters
     const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent) || window.innerWidth < 768;
     
+    // Apply contrast enhancement for better edge detection on similar-colored backgrounds
+    const enhanced = new window.cv.Mat();
+    window.cv.convertScaleAbs(gray, enhanced, 1.5, 30); // Increase contrast and brightness
+    
+    // Apply histogram equalization to improve contrast
+    const equalized = new window.cv.Mat();
+    window.cv.equalizeHist(enhanced, equalized);
+    
     // Apply Gaussian blur to reduce noise - slightly more blur for mobile
     const blurSize = isMobile ? 7 : 5;
-    window.cv.GaussianBlur(gray, blur, new window.cv.Size(blurSize, blurSize), 0);
+    window.cv.GaussianBlur(equalized, blur, new window.cv.Size(blurSize, blurSize), 0);
 
-    // Apply Canny edge detection - more sensitive for easier detection
-    const cannyLow = isMobile ? 15 : 20;
-    const cannyHigh = isMobile ? 60 : 80;
+    // Try adaptive thresholding first for low-contrast scenarios
+    const adaptive = new window.cv.Mat();
+    window.cv.adaptiveThreshold(
+      blur,
+      adaptive,
+      255,
+      window.cv.ADAPTIVE_THRESH_GAUSSIAN_C,
+      window.cv.THRESH_BINARY,
+      11,
+      2
+    );
+    
+    // Apply Canny edge detection with lower thresholds for better sensitivity
+    // Use lower thresholds to detect edges even on similar-colored backgrounds
+    const cannyLow = isMobile ? 10 : 15;
+    const cannyHigh = isMobile ? 40 : 50;
     window.cv.Canny(blur, edges, cannyLow, cannyHigh);
+    
+    // Combine adaptive threshold and Canny edges for better detection
+    const combined = new window.cv.Mat();
+    window.cv.bitwise_or(edges, adaptive, combined);
+    
+    // Cleanup intermediate mats
+    enhanced.delete();
+    equalized.delete();
+    adaptive.delete();
 
     // Apply morphological operations to close gaps in card edges
-    const kernel = window.cv.getStructuringElement(window.cv.MORPH_RECT, new window.cv.Size(3, 3));
+    // Use larger kernel for better edge connection on low-contrast images
+    const kernel = window.cv.getStructuringElement(window.cv.MORPH_RECT, new window.cv.Size(5, 5));
     const closed = new window.cv.Mat();
-    window.cv.morphologyEx(edges, closed, window.cv.MORPH_CLOSE, kernel);
+    window.cv.morphologyEx(combined, closed, window.cv.MORPH_CLOSE, kernel);
+    
+    // Additional dilation to strengthen weak edges
+    const dilated = new window.cv.Mat();
+    const dilateKernel = window.cv.getStructuringElement(window.cv.MORPH_RECT, new window.cv.Size(3, 3));
+    window.cv.dilate(closed, dilated, dilateKernel);
+    
     kernel.delete();
+    dilateKernel.delete();
+    combined.delete();
 
     // Find contours
     window.cv.findContours(
-      closed,
+      dilated,
       contours,
       hierarchy,
       window.cv.RETR_EXTERNAL,
@@ -324,22 +363,24 @@ export function findDocumentContour(src: any): any[] | null {
       const contour = contours.get(i);
       const area = window.cv.contourArea(contour);
 
-      // Minimum area threshold - much lower for easier detection
-      const minArea = isMobile ? 2000 : 3000;
+      // Minimum area threshold - much lower for easier detection, especially for cards held by hand
+      const minArea = isMobile ? 1500 : 2000;
       if (area < minArea) {
         contour.delete();
         continue;
       }
 
-      // Approximate contour to polygon - more lenient for easier detection
-      const epsilonFactor = isMobile ? 0.04 : 0.035;
+      // Approximate contour to polygon - more lenient for cards held by hand
+      // Higher epsilon factor allows for less precise edges (when fingers cover parts)
+      const epsilonFactor = isMobile ? 0.05 : 0.045;
       const epsilon = epsilonFactor * window.cv.arcLength(contour, true);
       const approx = new window.cv.Mat();
       window.cv.approxPolyDP(contour, approx, epsilon, true);
 
-      // Check if it's roughly rectangular (4-8 corners acceptable)
+      // Check if it's roughly rectangular (4-12 corners acceptable for cards held by hand)
+      // More corners allowed because fingers/hand might create additional edge points
       const minCorners = 4;
-      const maxCorners = 8;
+      const maxCorners = 12;
       if (approx.rows < minCorners || approx.rows > maxCorners) {
         approx.delete();
         contour.delete();
@@ -390,6 +431,7 @@ export function findDocumentContour(src: any): any[] | null {
     blur.delete();
     edges.delete();
     closed.delete();
+    dilated.delete();
     hierarchy.delete();
     contours.delete();
 
