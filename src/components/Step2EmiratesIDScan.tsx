@@ -72,10 +72,6 @@ export default function Step2EmiratesIDScan({ onComplete, onBack, service }: Ste
   const detectionStartTimeRef = useRef<number | null>(null)
   // Ref to store the delay timeout
   const captureDelayTimeoutRef = useRef<number | null>(null)
-  // Ref to track detection start time for delay
-  const detectionStartTimeRef = useRef<number | null>(null)
-  // Ref to store the delay timeout
-  const captureDelayTimeoutRef = useRef<number | null>(null)
   
   // Check if browser supports camera API
   const checkCameraSupport = (): { supported: boolean; error?: string } => {
@@ -794,12 +790,6 @@ export default function Step2EmiratesIDScan({ onComplete, onBack, service }: Ste
           }
           setDetectionReady(false)
           setRemainingSeconds(null)
-          setDetectedPoints(null)
-          drawDetection(null, canvasRef.current, videoRef.current, false)
-        }
-        } else {
-          // Document not detected or conditions not met - clear detection
-          setDetectionReady(false)
           setDetectedPoints(null)
           drawDetection(null, canvasRef.current, videoRef.current, false)
         }
