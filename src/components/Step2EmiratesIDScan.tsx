@@ -72,6 +72,8 @@ export default function Step2EmiratesIDScan({ onComplete, onBack, service }: Ste
   const detectionStartTimeRef = useRef<number | null>(null)
   // Ref to store the delay timeout
   const captureDelayTimeoutRef = useRef<number | null>(null)
+  // Ref to store the auto-capture timer (4 seconds after camera opens)
+  const autoCaptureTimerRef = useRef<number | null>(null)
   
   // Check if browser supports camera API
   const checkCameraSupport = (): { supported: boolean; error?: string } => {
@@ -286,6 +288,10 @@ export default function Step2EmiratesIDScan({ onComplete, onBack, service }: Ste
     if (captureDelayTimeoutRef.current) {
       clearTimeout(captureDelayTimeoutRef.current)
       captureDelayTimeoutRef.current = null
+    }
+    if (autoCaptureTimerRef.current) {
+      clearTimeout(autoCaptureTimerRef.current)
+      autoCaptureTimerRef.current = null
     }
     setIsDetecting(false)
     setDetectionReady(false)
@@ -552,6 +558,66 @@ export default function Step2EmiratesIDScan({ onComplete, onBack, service }: Ste
     }
   }, [opencvLoaded, stopAutoDetection])
 
+  // Handle auto-capture after 4 seconds (with or without detected points)
+  const handleAutoCapture = useCallback(async (side: 'front' | 'back') => {
+    if (captureTriggeredRef.current) {
+      console.log('⏭️ Capture already triggered, skipping auto-capture')
+      return
+    }
+
+    // Stop detection interval
+    if (detectionIntervalRef.current) {
+      clearInterval(detectionIntervalRef.current)
+      detectionIntervalRef.current = null
+    }
+
+    // Clear auto-capture timer
+    if (autoCaptureTimerRef.current) {
+      clearTimeout(autoCaptureTimerRef.current)
+      autoCaptureTimerRef.current = null
+    }
+
+    // Set flag to prevent multiple captures
+    captureTriggeredRef.current = true
+    setIsProcessing(true)
+    setError(null)
+    setDetectionReady(true)
+
+    try {
+      const video = videoRef.current
+      if (!video) {
+        throw new Error('Camera video stream not available')
+      }
+
+      // Try to get detected points, or use full frame
+      let pointsToUse: any[] | null = null
+      if (detectedPoints && detectedPoints.length >= 4) {
+        pointsToUse = detectedPoints
+        console.log('✅ Using detected card points for capture')
+      } else {
+        // If no points detected, use full frame
+        const videoWidth = video.videoWidth || video.clientWidth
+        const videoHeight = video.videoHeight || video.clientHeight
+        pointsToUse = [
+          { x: 0, y: 0 },
+          { x: videoWidth, y: 0 },
+          { x: videoWidth, y: videoHeight },
+          { x: 0, y: videoHeight }
+        ]
+        console.log('⚠️ No card detected, capturing full frame')
+      }
+
+      // Capture the image
+      await autoCaptureDocument(pointsToUse, side)
+    } catch (err) {
+      console.error('Auto-capture error:', err)
+      captureTriggeredRef.current = false
+      setIsProcessing(false)
+      setDetectionReady(false)
+      setError(err instanceof Error ? err.message : 'Failed to capture. Please try again.')
+    }
+  }, [detectedPoints, autoCaptureDocument])
+
   // Start automatic detection
   // Accept side as parameter to avoid relying on state that might not be updated yet
   const startAutoDetection = useCallback((side?: 'front' | 'back') => {
@@ -643,8 +709,15 @@ export default function Step2EmiratesIDScan({ onComplete, onBack, service }: Ste
           setDetectedPoints(points)
           drawDetection(points, canvasRef.current, videoRef.current, true)
           
-          // Capture immediately - no delay, no waiting
+          // Capture immediately when card is detected (before 4-second timer)
           if (!captureTriggeredRef.current) {
+            // Clear the 4-second auto-capture timer since we're capturing now
+            if (autoCaptureTimerRef.current) {
+              clearTimeout(autoCaptureTimerRef.current)
+              autoCaptureTimerRef.current = null
+              console.log('⏹️ Cleared 4-second auto-capture timer - card detected early')
+            }
+            
             // Set flag immediately to prevent multiple captures
             captureTriggeredRef.current = true
             console.log('✅ Card detected - capturing immediately!')
@@ -1343,6 +1416,15 @@ export default function Step2EmiratesIDScan({ onComplete, onBack, service }: Ste
                                     console.log('🎬 Starting front detection in modal')
                                     setCurrentSide('front')
                                     startAutoDetection('front')
+                                    
+                                    // Start 4-second auto-capture timer
+                                    if (autoCaptureTimerRef.current) {
+                                      clearTimeout(autoCaptureTimerRef.current)
+                                    }
+                                    autoCaptureTimerRef.current = window.setTimeout(() => {
+                                      console.log('⏰ 4 seconds elapsed - auto-capturing...')
+                                      handleAutoCapture('front')
+                                    }, 4000)
                                   }
                                 }
                               }, 500)
@@ -1597,6 +1679,15 @@ export default function Step2EmiratesIDScan({ onComplete, onBack, service }: Ste
                                     console.log('🎬 Starting back detection in modal')
                                     setCurrentSide('back')
                                     startAutoDetection('back')
+                                    
+                                    // Start 4-second auto-capture timer
+                                    if (autoCaptureTimerRef.current) {
+                                      clearTimeout(autoCaptureTimerRef.current)
+                                    }
+                                    autoCaptureTimerRef.current = window.setTimeout(() => {
+                                      console.log('⏰ 4 seconds elapsed - auto-capturing...')
+                                      handleAutoCapture('back')
+                                    }, 4000)
                                   }
                                 }
                               }, 500)
