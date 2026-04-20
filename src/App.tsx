@@ -16,8 +16,11 @@ import ErrorBoundary from './components/ErrorBoundary'
 import LoadingOverlay from './components/LoadingOverlay'
 import { API_CONFIG } from './config/api.config'
 import { CheckCircle, Printer } from 'lucide-react'
+import PrivacyPolicyPage from './components/PrivacyPolicyPage'
 
 function App() {
+  const [currentPath, setCurrentPath] = useState(window.location.pathname.toLowerCase())
+  const isPrivacyPolicyRoute = currentPath === '/privacypolicy'
 
   const [currentStep, setCurrentStep] = useState<Step>(0 as Step) // Start at 0 for service selection
   const [selectedService, setSelectedService] = useState<string | null>(null)
@@ -43,6 +46,12 @@ function App() {
   useEffect(() => {
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }, [currentStep])
+
+  useEffect(() => {
+    const syncPath = () => setCurrentPath(window.location.pathname.toLowerCase())
+    window.addEventListener('popstate', syncPath)
+    return () => window.removeEventListener('popstate', syncPath)
+  }, [])
 
   const navigateToStep = (step: Step, message: string = 'Loading...') => {
     setIsLoading(true)
@@ -465,7 +474,9 @@ function App() {
       <Header />
       <div className="flex-1 py-8 px-4">
           <div className="max-w-7xl mx-auto">
-            
+
+            {!isPrivacyPolicyRoute && (
+              <>
             {/* Progress Indicator - Only show after route selection */}
             {currentStep > 0 && (
               <div className="mb-6">
@@ -659,6 +670,10 @@ function App() {
               )}
               </ErrorBoundary>
             </div>
+              </>
+            )}
+
+            {isPrivacyPolicyRoute && <PrivacyPolicyPage />}
           </div>
         </div>
       <Footer />
