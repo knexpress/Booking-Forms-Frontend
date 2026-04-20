@@ -107,8 +107,8 @@ export default function ServiceSelection({ onSelectService }: ServiceSelectionPr
 
       {/* Title Section */}
       <div className="text-center mb-6 sm:mb-8">
-        <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-green-600 mb-2">
-          Select Service
+        <h1 className="text-3xl sm:text-4xl lg:text-5xl font-bold text-green-600 mb-2">
+          Booking Form
         </h1>
         <p className="text-sm sm:text-base lg:text-lg text-gray-600">
           Choose your shipping service
