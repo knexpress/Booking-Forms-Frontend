@@ -4,6 +4,10 @@
   "framework": "vite",
   "rewrites": [
     {
+      "source": "/googlee5aed8c5c3b86fc8.html",
+      "destination": "/googlee5aed8c5c3b86fc8.html"
+    },
+    {
       "source": "/(.*)",
       "destination": "/index.html"
     }
